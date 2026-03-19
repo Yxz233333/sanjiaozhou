@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useState, useEffect, useRef } from "react";
+import { motion, AnimatePresence, useAnimation } from "framer-motion";
 import { 
   Settings, 
   Play, 
@@ -170,18 +170,22 @@ export default function Home() {
     setIsPlaying(true);
     setAnimatingItems([]);
     
+    // We handle the completion ourselves inside the items
     selectedList.forEach((item, index) => {
-      // 这里的触发时间是物品依次出现的时间间隔
       setTimeout(() => {
-        setAnimatingItems(prev => [...prev, item]);
+        setAnimatingItems(prev => [...prev, { ...item, uid: Math.random().toString() }]);
       }, index * animDelay[0]);
     });
+  };
 
-    // 整个动画总时间估算：最后一个物品出现的时间 + 物品在屏幕上滚动的总时间
-    const totalTime = selectedList.length * animDelay[0] + 8000;
-    setTimeout(() => {
-      setIsPlaying(false);
-    }, totalTime);
+  const handleItemComplete = (uid: string) => {
+    setAnimatingItems(prev => {
+      const newItems = prev.filter(i => i.uid !== uid);
+      if (newItems.length === 0) {
+        setIsPlaying(false);
+      }
+      return newItems;
+    });
   };
 
   return (
@@ -328,33 +332,56 @@ export default function Home() {
         <div className="w-[450px] flex flex-col bg-[#111] shrink-0 border-l border-slate-800 z-20">
           
           {/* PREVIEW CANVAS */}
-          <div className="h-[253px] bg-black relative shrink-0 overflow-hidden" style={{ backgroundColor: bgColor }}>
+          <div className="h-[300px] bg-black relative shrink-0 overflow-hidden" style={{ backgroundColor: bgColor }}>
              {/* Toolbar */}
              <div className="absolute top-2 left-2 z-20 bg-slate-900/80 backdrop-blur border border-slate-800 rounded flex p-1 shadow-xl">
-               <div className="px-2 py-1 text-[10px] font-medium text-slate-400 flex items-center gap-1.5">
+               <div className="px-2 py-1 text-[10px] font-medium text-slate-400 flex items-center gap-1.5 border-r border-slate-700">
                  <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
                  Preview Area
                </div>
+               <button 
+                 className="px-2 py-1 text-[10px] font-medium text-emerald-400 hover:bg-slate-800 transition-colors flex items-center gap-1"
+                 title="使用OBS等录屏软件直接录制此区域，或点击此按钮全屏预览后录制"
+                 onClick={() => {
+                    const el = document.getElementById('preview-canvas');
+                    if (el) el.requestFullscreen();
+                 }}
+               >
+                 全屏录制 (Export)
+               </button>
              </div>
 
-             {/* Loot Overlay Container */}
-             <div className="absolute top-10 right-10 flex flex-col gap-2 w-[280px] pointer-events-none">
-               <AnimatePresence>
-                 {animatingItems.map((item, idx) => (
-                   <LootCard 
-                     key={item.uid} 
-                     item={item} 
-                     lang={lang} 
-                     config={{
-                       pauseBeforeExpand: pauseBeforeExpand[0],
-                       expandDuration: expandDuration[0],
-                       pauseAfterExpand: pauseAfterExpand[0],
-                       cardScale: cardScale[0],
-                       expandScale: expandScale[0]
-                     }}
-                   />
-                 ))}
-               </AnimatePresence>
+             {/* Loot Overlay Container - Horizontal Scrolling */}
+             <div 
+               id="preview-canvas"
+               className="absolute inset-0 flex items-center justify-center overflow-hidden"
+               style={{ backgroundColor: bgColor }}
+             >
+               <div className="relative w-full h-full flex items-center justify-center">
+                 {/* 中心准星线，辅助确认中心点，录制时可考虑隐藏 */}
+                 <div className="absolute left-1/2 top-0 bottom-0 w-[1px] bg-white/20 pointer-events-none border-dashed border-l border-white/20" />
+                 
+                 <AnimatePresence>
+                   {animatingItems.map((item, idx) => (
+                     <HorizontalLootCard 
+                       key={item.uid} 
+                       item={item} 
+                       lang={lang} 
+                       index={idx}
+                       config={{
+                         animDelay: animDelay[0],
+                         pauseBeforeExpand: pauseBeforeExpand[0],
+                         expandDuration: expandDuration[0],
+                         pauseAfterExpand: pauseAfterExpand[0],
+                         cardScale: cardScale[0],
+                         expandScale: expandScale[0],
+                         totalItems: animatingItems.length
+                       }}
+                       onComplete={handleItemComplete}
+                     />
+                   ))}
+                 </AnimatePresence>
+               </div>
              </div>
           </div>
 
@@ -521,118 +548,184 @@ export default function Home() {
 }
 
 // Separate component for the animated loot card
-function LootCard({ 
+function HorizontalLootCard({ 
   item, 
   lang,
-  config
+  index,
+  config,
+  onComplete
 }: { 
   item: SelectedItem, 
   lang: "zh" | "en",
+  index: number,
   config: {
+    animDelay: number,
     pauseBeforeExpand: number,
     expandDuration: number,
     pauseAfterExpand: number,
     cardScale: number,
-    expandScale: number
-  }
+    expandScale: number,
+    totalItems: number
+  },
+  onComplete: (uid: string) => void
 }) {
   const rarityConfig = RARITIES[item.rarity as keyof typeof RARITIES];
-  const catIcon = CATEGORIES.find(c => c.id === item.category)?.icon || ImageIcon;
   
   // Create a placeholder based on category
   const placeholderType = item.category === "cards" ? "card_placeholder.png" : `placeholder_${item.category}.png`;
-  const placeholderImage = `/images/items/${placeholderType}`; // You'll need to add these images
+  const placeholderImage = `/images/items/${placeholderType}`;
+
+  const controls = useAnimation();
+
+  // Time calculations (all in seconds for Framer Motion)
+  const T_start_to_center = 1.0; // Time it takes to travel from right edge to center
+  const T_pause_before = config.pauseBeforeExpand / 1000;
+  const T_expand = config.expandDuration / 1000;
+  const T_pause_after = config.pauseAfterExpand / 1000;
+  const T_center_to_left = 1.0; // Time to travel from center to left edge
+
+  const T_total_lifespan = T_start_to_center + T_pause_before + T_expand + T_pause_after + T_center_to_left;
+
+  useEffect(() => {
+    const sequence = async () => {
+      // 1. Enter to center
+      await controls.start({
+        x: "0%",
+        opacity: 1,
+        transition: { duration: T_start_to_center, ease: "easeOut" }
+      });
+      
+      // 2. Pause
+      await new Promise(resolve => setTimeout(resolve, config.pauseBeforeExpand));
+      
+      // 3. Expand
+      await controls.start({
+        scale: config.cardScale * config.expandScale,
+        transition: { duration: T_expand / 2, ease: "easeOut" }
+      });
+      
+      // 4. Shrink
+      await controls.start({
+        scale: config.cardScale,
+        transition: { duration: T_expand / 2, ease: "easeIn" }
+      });
+      
+      // 5. Pause after
+      await new Promise(resolve => setTimeout(resolve, config.pauseAfterExpand));
+      
+      // 6. Exit to left
+      await controls.start({
+        x: "-150vw",
+        opacity: 0,
+        transition: { duration: T_center_to_left, ease: "easeIn" }
+      });
+      
+      // Notify parent we're done
+      onComplete(item.uid);
+    };
+
+    sequence();
+  }, []);
 
   return (
     <motion.div
-      initial={{ opacity: 0, x: 100, scale: config.cardScale * 0.9 }}
-      animate={[
-        // Phase 1: Slide in and wait
-        { opacity: 1, x: 0, scale: config.cardScale, transition: { type: "spring", stiffness: 300, damping: 24 } },
-        // Phase 2: Expand to center (simulated by scale up)
-        { scale: config.cardScale * config.expandScale, transition: { delay: config.pauseBeforeExpand / 1000, duration: config.expandDuration / 1000 } },
-        // Phase 3: Shrink back and continue
-        { scale: config.cardScale, transition: { delay: (config.pauseBeforeExpand + config.expandDuration + config.pauseAfterExpand) / 1000, duration: config.expandDuration / 1000 } }
-      ]}
-      exit={{ opacity: 0, y: -20, scale: config.cardScale * 0.9, transition: { duration: 0.2 } }}
-      className="relative overflow-hidden group origin-right mx-auto"
-      style={{ width: '280px', transformOrigin: 'center' }}
+      initial={{ x: "150vw", scale: config.cardScale, opacity: 0 }}
+      animate={controls}
+      className="absolute flex items-center justify-center pointer-events-none"
+      style={{ zIndex: config.totalItems - index }} 
     >
-      {/* Angled cut background typical in tactical UI */}
-      <div 
-        className="absolute inset-0 bg-gradient-to-r from-black/90 to-black/60 backdrop-blur-sm border border-white/10"
-        style={{
-          clipPath: "polygon(0 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%)"
-        }}
-      />
-      
-      {/* Colored accent line */}
-      <motion.div 
-        initial={{ scaleY: 0 }}
-        animate={{ scaleY: 1 }}
-        transition={{ delay: 0.2, duration: 0.3 }}
-        className="absolute left-0 top-0 bottom-0 w-1 origin-top z-20"
-        style={{ backgroundColor: rarityConfig.color, boxShadow: `0 0 8px ${rarityConfig.color}` }}
-      />
+      <div className="relative overflow-hidden group origin-center shadow-2xl" style={{ width: '280px' }}>
+        {/* Angled cut background typical in tactical UI */}
+        <div 
+          className="absolute inset-0 bg-gradient-to-r from-black/95 to-black/80 backdrop-blur-md border border-white/10"
+          style={{
+            clipPath: "polygon(0 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%)"
+          }}
+        />
+        
+        {/* Colored accent line */}
+        <div 
+          className="absolute left-0 top-0 bottom-0 w-1.5 z-20"
+          style={{ backgroundColor: rarityConfig.color, boxShadow: `0 0 10px ${rarityConfig.color}` }}
+        />
 
-      <div className="relative p-2 pl-4 flex items-center gap-3">
-        {/* Item Icon placeholder or Image */}
-        <div className="w-12 h-12 bg-gradient-to-br from-white/10 to-transparent border border-white/20 flex items-center justify-center shadow-inner relative overflow-hidden shrink-0">
-          <div className="absolute inset-0 opacity-20" style={{ backgroundColor: rarityConfig.color }} />
-          
-          <motion.div 
-            animate={{ 
-              opacity: [1, 1, 0, 0], // Show placeholder -> Hide placeholder
-              scale: [1, 1, 0.8, 0.8]
-            }}
-            transition={{ 
-              times: [0, 0.9, 1, 1], 
-              duration: (config.pauseBeforeExpand + config.expandDuration) / 1000 
-            }}
-            className="absolute inset-0 flex items-center justify-center bg-slate-900"
-          >
-            {/* 搜查前的状态图 */}
-            <img src={placeholderImage} alt="unsearched" className="w-10 h-10 object-contain opacity-50" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-            <span className="text-[7px] text-white/40 absolute bottom-0.5 font-display tracking-widest">SEARCH</span>
-          </motion.div>
+        <div className="relative p-3 pl-5 flex items-center gap-4">
+          {/* Item Icon placeholder or Image */}
+          <div className="w-16 h-16 bg-gradient-to-br from-white/10 to-transparent border border-white/20 flex items-center justify-center shadow-inner relative overflow-hidden shrink-0">
+            <div className="absolute inset-0 opacity-20" style={{ backgroundColor: rarityConfig.color }} />
+            
+            <motion.div 
+              animate={{ 
+                opacity: [1, 1, 0, 0], // Hide at exact middle of expand phase
+                scale: [1, 1, 0.5, 0.5]
+              }}
+              transition={{ 
+                times: [0, (T_start_to_center + T_pause_before) / T_total_lifespan, (T_start_to_center + T_pause_before + T_expand/2) / T_total_lifespan, 1], 
+                duration: T_total_lifespan
+              }}
+              className="absolute inset-0 flex items-center justify-center bg-slate-950 z-20"
+            >
+              <img src={placeholderImage} alt="unsearched" className="w-12 h-12 object-contain opacity-50" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+              <span className="text-[9px] text-white/40 absolute bottom-1 font-display tracking-widest font-bold">SEARCH</span>
+            </motion.div>
 
-          <motion.div
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ 
-              opacity: [0, 0, 1, 1], // Hide real item -> Show real item
-              scale: [0.8, 0.8, 1, 1]
-            }}
-            transition={{ 
-              times: [0, 0.9, 1, 1], 
-              duration: (config.pauseBeforeExpand + config.expandDuration) / 1000 
-            }}
-            className="absolute inset-0 flex items-center justify-center"
-          >
-            {item.image ? (
-              <img src={item.image} alt="" className="w-10 h-10 object-contain z-10 drop-shadow-md" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
-            ) : null}
-            <ImageIcon className={cn("w-6 h-6 text-white/80 z-10", item.image ? "hidden" : "block")} />
-          </motion.div>
-        </div>
+            <motion.div
+              initial={{ opacity: 0, scale: 0.5 }}
+              animate={{ 
+                opacity: [0, 0, 1, 1], 
+                scale: [0.5, 0.5, 1, 1]
+              }}
+              transition={{ 
+                times: [0, (T_start_to_center + T_pause_before) / T_total_lifespan, (T_start_to_center + T_pause_before + T_expand/2) / T_total_lifespan, 1], 
+                duration: T_total_lifespan
+              }}
+              className="absolute inset-0 flex items-center justify-center z-10"
+            >
+              {item.image ? (
+                <img src={item.image} alt="" className="w-14 h-14 object-contain drop-shadow-lg" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
+              ) : null}
+              <ImageIcon className={cn("w-8 h-8 text-white/80", item.image ? "hidden" : "block")} />
+            </motion.div>
+          </div>
 
-        {/* Info */}
-        <div className="flex-1 flex flex-col justify-center pr-4 overflow-hidden">
-          <motion.div 
-            initial={{ opacity: 0, x: -10 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: (config.pauseBeforeExpand + config.expandDuration) / 1000 }}
-            className="flex items-center gap-2 mb-0.5"
-          >
-            <span className="text-[10px] uppercase font-bold tracking-widest drop-shadow-md" style={{ color: rarityConfig.color }}>{rarityConfig[lang]}</span>
-          </motion.div>
-          <motion.h3 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: (config.pauseBeforeExpand + config.expandDuration) / 1000 }}
-            className="font-display font-bold text-lg text-white leading-none tracking-wide drop-shadow-md truncate"
-          >
-            {item.name[lang]}
-          </motion.h3>
+          {/* Info */}
+          <div className="flex-1 flex flex-col justify-center pr-4 overflow-hidden relative h-[64px]">
+             {/* Info overlay (Searching state) */}
+             <motion.div
+                animate={{ 
+                  opacity: [1, 1, 0, 0], 
+                }}
+                transition={{ 
+                  times: [0, (T_start_to_center + T_pause_before) / T_total_lifespan, (T_start_to_center + T_pause_before + T_expand/2) / T_total_lifespan, 1], 
+                  duration: T_total_lifespan
+                }}
+                className="absolute inset-0 flex flex-col justify-center bg-transparent z-20"
+             >
+                <div className="w-24 h-2 bg-white/10 rounded mb-2 animate-pulse" />
+                <div className="w-32 h-4 bg-white/10 rounded animate-pulse" />
+             </motion.div>
+
+             {/* Real Info */}
+             <motion.div 
+               initial={{ opacity: 0, x: -10 }}
+               animate={{ 
+                 opacity: [0, 0, 1, 1], 
+                 x: [-10, -10, 0, 0]
+               }}
+               transition={{ 
+                 times: [0, (T_start_to_center + T_pause_before) / T_total_lifespan, (T_start_to_center + T_pause_before + T_expand/2) / T_total_lifespan, 1], 
+                 duration: T_total_lifespan
+               }}
+               className="flex flex-col justify-center absolute inset-0 z-10"
+             >
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-xs uppercase font-bold tracking-widest drop-shadow-md" style={{ color: rarityConfig.color }}>{rarityConfig[lang]}</span>
+                </div>
+                <h3 className="font-display font-bold text-xl text-white leading-none tracking-wide drop-shadow-md truncate">
+                  {item.name[lang]}
+                </h3>
+             </motion.div>
+          </div>
         </div>
       </div>
     </motion.div>
