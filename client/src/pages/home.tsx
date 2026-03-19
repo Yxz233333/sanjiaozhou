@@ -14,7 +14,9 @@ import {
   FileText,
   Bomb,
   Package,
-  Globe
+  Globe,
+  GripVertical,
+  Clock
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import MOCK_ITEMS_DATA from "../data.json";
@@ -22,7 +24,25 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Slider } from "@/components/ui/slider";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { 
+  DndContext, 
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  useSortable
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 // --- TRANSLATIONS ---
 const i18n = {
@@ -124,7 +144,96 @@ const CATEGORIES = [
 const MOCK_ITEMS: { id: string, category: string, subcategory?: string, rarity: string, name: {zh: string, en: string}, image?: string }[] = MOCK_ITEMS_DATA;
 
 type ItemType = typeof MOCK_ITEMS[0];
-type SelectedItem = ItemType & { uid: string };
+type SelectedItem = ItemType & { uid: string, fixedTime?: number };
+
+// --- SORTABLE ITEM COMPONENT ---
+function SortableItem({ 
+  item, 
+  lang, 
+  onRemove, 
+  onTimeChange 
+}: { 
+  item: SelectedItem, 
+  lang: "zh" | "en", 
+  onRemove: (uid: string) => void,
+  onTimeChange: (uid: string, time: string) => void
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging
+  } = useSortable({ id: item.uid });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 50 : 1,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  const rarityConfig = RARITIES[item.rarity as keyof typeof RARITIES];
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={cn(
+        "bg-slate-900 border rounded p-2 flex items-center gap-3 group relative overflow-hidden",
+        isDragging ? "border-emerald-500 shadow-lg shadow-emerald-500/20" : "border-slate-800"
+      )}
+    >
+      <div className="absolute left-0 top-0 bottom-0 w-1" style={{ backgroundColor: rarityConfig.color }} />
+      
+      {/* Drag Handle */}
+      <div 
+        {...attributes} 
+        {...listeners}
+        className="cursor-grab active:cursor-grabbing p-1 text-slate-600 hover:text-slate-300 ml-1"
+      >
+        <GripVertical className="w-4 h-4" />
+      </div>
+
+      <div className="w-8 h-8 bg-slate-950 flex items-center justify-center rounded border border-slate-800 overflow-hidden shrink-0">
+        {item.image ? (
+          <img src={item.image} alt="" className="w-6 h-6 object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
+        ) : null}
+        <ImageIcon className={cn("w-4 h-4 text-slate-500", item.image ? "hidden" : "block")} />
+      </div>
+      
+      <div className="flex-1 min-w-0">
+        <h4 className="text-sm font-medium text-slate-200 truncate">{item.name[lang]}</h4>
+        <p className="text-[10px] text-slate-500 font-display uppercase tracking-wider">
+          {rarityConfig[lang]}
+        </p>
+      </div>
+
+      <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-1 bg-slate-950 px-2 py-1 rounded border border-slate-800 group-hover:border-slate-700 transition-colors">
+          <Clock className="w-3 h-3 text-slate-500" />
+          <input 
+            type="number"
+            placeholder="ms"
+            value={item.fixedTime || ""}
+            onChange={(e) => onTimeChange(item.uid, e.target.value)}
+            className="w-12 bg-transparent text-xs text-slate-300 outline-none placeholder:text-slate-700 font-mono"
+            min="0"
+            step="100"
+          />
+        </div>
+        
+        <button 
+          onClick={() => onRemove(item.uid)} 
+          className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-slate-800 rounded transition-colors"
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export default function Home() {
   const [lang, setLang] = useState<"zh" | "en">("zh");
@@ -166,35 +275,80 @@ export default function Home() {
     setSelectedList(prev => prev.filter(item => item.uid !== uid));
   };
 
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    
+    if (over && active.id !== over.id) {
+      setSelectedList((items) => {
+        const oldIndex = items.findIndex((item) => item.uid === active.id);
+        const newIndex = items.findIndex((item) => item.uid === over.id);
+        return arrayMove(items, oldIndex, newIndex);
+      });
+    }
+  };
+
+  const handleTimeChange = (uid: string, timeValue: string) => {
+    const time = timeValue === "" ? undefined : parseInt(timeValue, 10);
+    setSelectedList(prev => prev.map(item => 
+      item.uid === uid ? { ...item, fixedTime: time } : item
+    ));
+  };
+
   const handlePlay = () => {
     if (selectedList.length === 0 || isPlaying) return;
     
     setIsPlaying(true);
     setAnimatingItems([]);
     
-    let currentSpawnIndex = 0;
+    // Split items into fixed-time and auto-queue
+    const fixedTimeItems = selectedList.filter(item => item.fixedTime !== undefined && !isNaN(item.fixedTime));
+    const autoQueueItems = selectedList.filter(item => item.fixedTime === undefined || isNaN(item.fixedTime));
     
-    // 我们用一个定时器来逐个生成物品，并处理挤出逻辑
-    const spawnInterval = setInterval(() => {
-      if (currentSpawnIndex >= selectedList.length) {
-        clearInterval(spawnInterval);
-        return;
-      }
+    // 1. Schedule Fixed Time items
+    fixedTimeItems.forEach(item => {
+      setTimeout(() => {
+        setAnimatingItems(prev => {
+          const newItem = { ...item, uid: Math.random().toString() };
+          const updated = [...prev, newItem];
+          if (updated.length > maxStackedItems[0]) {
+             return updated.slice(1);
+          }
+          return updated;
+        });
+      }, item.fixedTime);
+    });
 
-      const itemToSpawn = selectedList[currentSpawnIndex];
-      const newItem = { ...itemToSpawn, uid: Math.random().toString() };
+    // 2. Schedule Auto Queue items (Sequential)
+    if (autoQueueItems.length > 0) {
+      let currentSpawnIndex = 0;
       
-      setAnimatingItems(prev => {
-        const updated = [...prev, newItem];
-        if (updated.length > maxStackedItems[0]) {
-           return updated.slice(1); // 移除最老的一个
+      const spawnInterval = setInterval(() => {
+        if (currentSpawnIndex >= autoQueueItems.length) {
+          clearInterval(spawnInterval);
+          return;
         }
-        return updated;
-      });
-      
-      currentSpawnIndex++;
-    }, animDelay[0]);
 
+        const itemToSpawn = autoQueueItems[currentSpawnIndex];
+        const newItem = { ...itemToSpawn, uid: Math.random().toString() };
+        
+        setAnimatingItems(prev => {
+          const updated = [...prev, newItem];
+          if (updated.length > maxStackedItems[0]) {
+             return updated.slice(1);
+          }
+          return updated;
+        });
+        
+        currentSpawnIndex++;
+      }, animDelay[0]);
+    }
   };
 
   const handleItemComplete = (uid: string) => {
@@ -528,43 +682,28 @@ export default function Home() {
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    <AnimatePresence>
-                      {selectedList.map((item, index) => {
-                        const rarityConfig = RARITIES[item.rarity as keyof typeof RARITIES];
-                        return (
-                          <motion.div
-                            key={item.uid}
-                            initial={{ opacity: 0, x: -20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            exit={{ opacity: 0, height: 0, marginBottom: 0 }}
-                            className="bg-slate-900 border border-slate-800 rounded p-2 flex items-center gap-3 group relative overflow-hidden"
-                          >
-                            <div className="absolute left-0 top-0 bottom-0 w-1" style={{ backgroundColor: rarityConfig.color }} />
-                            
-                            <div className="w-8 h-8 bg-slate-950 flex items-center justify-center rounded border border-slate-800 ml-1 overflow-hidden">
-                              {item.image ? (
-                                <img src={item.image} alt="" className="w-6 h-6 object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
-                              ) : null}
-                              <ImageIcon className={cn("w-4 h-4 text-slate-500", item.image ? "hidden" : "block")} />
-                            </div>
-                            
-                            <div className="flex-1 min-w-0">
-                              <h4 className="text-sm font-medium text-slate-200 truncate">{item.name[lang]}</h4>
-                              <p className="text-[10px] text-slate-500 font-display uppercase tracking-wider">
-                                {rarityConfig[lang]}
-                              </p>
-                            </div>
-                            
-                            <button 
-                              onClick={() => handleRemoveItem(item.uid)} 
-                              className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-slate-800 rounded transition-colors opacity-0 group-hover:opacity-100"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </motion.div>
-                        )
-                      })}
-                    </AnimatePresence>
+                    <DndContext 
+                      sensors={sensors}
+                      collisionDetection={closestCenter}
+                      onDragEnd={handleDragEnd}
+                    >
+                      <SortableContext 
+                        items={selectedList.map(i => i.uid)}
+                        strategy={verticalListSortingStrategy}
+                      >
+                        <div className="space-y-2">
+                          {selectedList.map((item) => (
+                            <SortableItem 
+                              key={item.uid}
+                              item={item}
+                              lang={lang}
+                              onRemove={handleRemoveItem}
+                              onTimeChange={handleTimeChange}
+                            />
+                          ))}
+                        </div>
+                      </SortableContext>
+                    </DndContext>
                   </div>
                 )}
               </ScrollArea>
