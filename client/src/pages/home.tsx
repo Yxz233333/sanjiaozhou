@@ -97,12 +97,12 @@ const i18n = {
 };
 
 const RARITIES = {
-  common: { en: "Common", zh: "普通", color: "#ef4444" },
-  uncommon: { en: "Uncommon", zh: "罕见", color: "#ef4444" },
-  rare: { en: "Rare", zh: "稀有", color: "#ef4444" },
-  epic: { en: "Epic", zh: "史诗", color: "#ef4444" },
-  legendary: { en: "Legendary", zh: "传说", color: "#ef4444" },
-  mythic: { en: "Mythic", zh: "神话", color: "#ef4444" },
+  common: { en: "Mythic", zh: "神话", color: "#ef4444" },
+  uncommon: { en: "Mythic", zh: "神话", color: "#ef4444" },
+  rare: { en: "Rare", zh: "稀有", color: "#3b82f6" }, // 蓝卡恢复颜色
+  epic: { en: "Epic", zh: "史诗", color: "#8b5cf6" }, // 紫卡恢复颜色
+  legendary: { en: "Legendary", zh: "传说", color: "#f59e0b" }, // 金卡恢复颜色
+  mythic: { en: "Mythic", zh: "神话", color: "#ef4444" }, // 红卡
 };
 
 const CATEGORIES = [
@@ -172,19 +172,29 @@ export default function Home() {
     setIsPlaying(true);
     setAnimatingItems([]);
     
-    selectedList.forEach((item, index) => {
-      setTimeout(() => {
-        setAnimatingItems(prev => {
-          // If we reach max stack, kick out the oldest item by slicing
-          const newItem = { ...item, uid: Math.random().toString() };
-          const updated = [...prev, newItem];
-          if (updated.length > maxStackedItems[0]) {
-            return updated.slice(updated.length - maxStackedItems[0]);
-          }
-          return updated;
-        });
-      }, index * animDelay[0]);
-    });
+    let currentSpawnIndex = 0;
+    
+    // 我们用一个定时器来逐个生成物品，并处理挤出逻辑
+    const spawnInterval = setInterval(() => {
+      if (currentSpawnIndex >= selectedList.length) {
+        clearInterval(spawnInterval);
+        return;
+      }
+
+      const itemToSpawn = selectedList[currentSpawnIndex];
+      const newItem = { ...itemToSpawn, uid: Math.random().toString() };
+      
+      setAnimatingItems(prev => {
+        const updated = [...prev, newItem];
+        if (updated.length > maxStackedItems[0]) {
+           return updated.slice(1); // 移除最老的一个
+        }
+        return updated;
+      });
+      
+      currentSpawnIndex++;
+    }, animDelay[0]);
+
   };
 
   const handleItemComplete = (uid: string) => {
@@ -360,31 +370,25 @@ export default function Home() {
                </button>
              </div>
 
-             {/* Loot Overlay Container - Horizontal Scrolling */}
+             {/* Loot Overlay Container - Top Right Stacking */}
              <div 
                id="preview-canvas"
-               className="absolute inset-0 flex items-center justify-center overflow-hidden"
+               className="absolute inset-0 overflow-hidden"
                style={{ backgroundColor: bgColor }}
              >
-               <div className="relative w-full h-full flex items-center justify-center">
-                 {/* 中心准星线，辅助确认中心点，录制时可考虑隐藏 */}
-                 <div className="absolute left-1/2 top-0 bottom-0 w-[1px] bg-white/20 pointer-events-none border-dashed border-l border-white/20" />
-                 
-                 <AnimatePresence>
+               <div className="absolute top-8 right-8 flex flex-col gap-3 w-[280px]">
+                 <AnimatePresence mode="sync">
                    {animatingItems.map((item, idx) => (
-                     <HorizontalLootCard 
+                     <StackedLootCard 
                        key={item.uid} 
                        item={item} 
                        lang={lang} 
-                       index={idx}
                        config={{
-                         animDelay: animDelay[0],
                          pauseBeforeExpand: pauseBeforeExpand[0],
                          expandDuration: expandDuration[0],
                          pauseAfterExpand: pauseAfterExpand[0],
                          cardScale: cardScale[0],
                          expandScale: expandScale[0],
-                         totalItems: animatingItems.length,
                          lifetime: itemLifetime[0]
                        }}
                        onComplete={handleItemComplete}
@@ -573,24 +577,21 @@ export default function Home() {
 }
 
 // Separate component for the animated loot card
-function HorizontalLootCard({ 
+function StackedLootCard({ 
   item, 
   lang,
-  index,
   config,
   onComplete
 }: { 
   item: SelectedItem, 
   lang: "zh" | "en",
-  index: number,
   config: {
-    animDelay: number,
     pauseBeforeExpand: number,
     expandDuration: number,
     pauseAfterExpand: number,
     cardScale: number,
     expandScale: number,
-    totalItems: number
+    lifetime: number
   },
   onComplete: (uid: string) => void
 }) {
@@ -604,67 +605,88 @@ function HorizontalLootCard({
 
   const T_total_lifespan = config.lifetime / 1000;
   
-  // Calculate relative times based on total lifespan to make sure they fit
-  const T_start_to_center = T_total_lifespan * 0.2; // 20% of time sliding in
+  // 动画时间分配
+  const T_start_to_center = 0.5; // 从右侧滑入的时间
   const T_pause_before = config.pauseBeforeExpand / 1000;
   const T_expand = config.expandDuration / 1000;
   const T_pause_after = config.pauseAfterExpand / 1000;
-  // Make sure we have time left for the exit animation
-  const T_center_to_left = Math.max(0.5, T_total_lifespan - T_start_to_center - T_pause_before - T_expand - T_pause_after);
+  // 剩余存活时间
+  const T_wait_before_exit = Math.max(0.1, T_total_lifespan - T_start_to_center - T_pause_before - T_expand - T_pause_after - 0.5); 
+  const T_exit_top = 0.5; // 向上滑出的时间
 
   useEffect(() => {
+    let isMounted = true;
+    
     const sequence = async () => {
-      // 1. Enter to center
+      // 1. 从右侧滑入原位
       await controls.start({
-        x: "0%",
+        x: 0,
         opacity: 1,
         transition: { duration: T_start_to_center, ease: "easeOut" }
       });
       
-      // 2. Pause
-      await new Promise(resolve => setTimeout(resolve, config.pauseBeforeExpand));
+      if (!isMounted) return;
       
-      // 3. Expand
+      // 2. 停顿
+      await new Promise(resolve => setTimeout(resolve, config.pauseBeforeExpand));
+      if (!isMounted) return;
+      
+      // 3. 放大 (此时让它向左突出一点以显示重点)
       await controls.start({
         scale: config.cardScale * config.expandScale,
+        x: -20, // 放大时稍微往左靠
         transition: { duration: T_expand / 2, ease: "easeOut" }
       });
+      if (!isMounted) return;
       
-      // 4. Shrink
+      // 4. 缩小回原位
       await controls.start({
         scale: config.cardScale,
+        x: 0,
         transition: { duration: T_expand / 2, ease: "easeIn" }
       });
+      if (!isMounted) return;
       
-      // 5. Pause after
+      // 5. 恢复后停顿
       await new Promise(resolve => setTimeout(resolve, config.pauseAfterExpand));
+      if (!isMounted) return;
       
-      // 6. Exit to left
+      // 6. 等待剩余寿命
+      await new Promise(resolve => setTimeout(resolve, T_wait_before_exit * 1000));
+      if (!isMounted) return;
+      
+      // 7. 向上方滑出屏幕
       await controls.start({
-        x: "-150vw",
+        y: -100, // 向上偏移
         opacity: 0,
-        transition: { duration: T_center_to_left, ease: "easeIn" }
+        scale: 0.8,
+        transition: { duration: T_exit_top, ease: "easeIn" }
       });
       
-      // Notify parent we're done
-      onComplete(item.uid);
+      if (isMounted) {
+        onComplete(item.uid);
+      }
     };
 
     sequence();
+    
+    return () => { isMounted = false; };
   }, []);
 
   return (
     <motion.div
-      initial={{ x: "150vw", scale: config.cardScale, opacity: 0 }}
+      layout // 允许列表由于增删元素而自动进行平滑的上下位移排版
+      initial={{ x: 100, scale: config.cardScale, opacity: 0 }}
       animate={controls}
-      exit={{ opacity: 0, scale: 0.8, transition: { duration: 0.3 } }}
-      className="absolute flex items-center justify-center pointer-events-none"
-      style={{ zIndex: config.totalItems - index }} 
+      // 当它被父组件强制移除（如超过上限被顶掉）时执行退场动画：向上方消失
+      exit={{ opacity: 0, y: -50, scale: 0.8, transition: { duration: 0.3 } }}
+      className="relative origin-right w-full"
+      style={{ scale: config.cardScale }}
     >
-      <div className="relative overflow-hidden group origin-center shadow-2xl" style={{ width: '280px' }}>
+      <div className="relative overflow-hidden group shadow-2xl bg-slate-900/90 backdrop-blur-sm border border-white/10" style={{ width: '100%' }}>
         {/* Angled cut background typical in tactical UI */}
         <div 
-          className="absolute inset-0 bg-gradient-to-r from-black/95 to-black/80 backdrop-blur-md border border-white/10"
+          className="absolute inset-0 bg-gradient-to-r from-black/95 to-black/80"
           style={{
             clipPath: "polygon(0 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%)"
           }}
@@ -676,9 +698,9 @@ function HorizontalLootCard({
           style={{ backgroundColor: rarityConfig.color, boxShadow: `0 0 10px ${rarityConfig.color}` }}
         />
 
-        <div className="relative p-3 pl-5 flex items-center gap-4">
+        <div className="relative p-2 pl-4 flex items-center gap-4">
           {/* Item Icon placeholder or Image */}
-          <div className="w-16 h-16 bg-gradient-to-br from-white/10 to-transparent border border-white/20 flex items-center justify-center shadow-inner relative overflow-hidden shrink-0">
+          <div className="w-14 h-14 bg-gradient-to-br from-white/10 to-transparent border border-white/20 flex items-center justify-center shadow-inner relative overflow-hidden shrink-0">
             <div className="absolute inset-0 opacity-20" style={{ backgroundColor: rarityConfig.color }} />
             
             <motion.div 
@@ -692,8 +714,8 @@ function HorizontalLootCard({
               }}
               className="absolute inset-0 flex items-center justify-center bg-slate-950 z-20"
             >
-              <img src={placeholderImage} alt="unsearched" className="w-12 h-12 object-contain opacity-50" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-              <span className="text-[9px] text-white/40 absolute bottom-1 font-display tracking-widest font-bold">SEARCH</span>
+              <img src={placeholderImage} alt="unsearched" className="w-10 h-10 object-contain opacity-50" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+              <span className="text-[8px] text-white/40 absolute bottom-0.5 font-display tracking-widest font-bold">SEARCH</span>
             </motion.div>
 
             <motion.div
@@ -709,14 +731,14 @@ function HorizontalLootCard({
               className="absolute inset-0 flex items-center justify-center z-10"
             >
               {item.image ? (
-                <img src={item.image} alt="" className="w-14 h-14 object-contain drop-shadow-lg" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
+                <img src={item.image} alt="" className="w-12 h-12 object-contain drop-shadow-lg" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
               ) : null}
-              <ImageIcon className={cn("w-8 h-8 text-white/80", item.image ? "hidden" : "block")} />
+              <ImageIcon className={cn("w-6 h-6 text-white/80", item.image ? "hidden" : "block")} />
             </motion.div>
           </div>
 
           {/* Info */}
-          <div className="flex-1 flex flex-col justify-center pr-4 overflow-hidden relative h-[64px]">
+          <div className="flex-1 flex flex-col justify-center pr-4 overflow-hidden relative h-[56px]">
              {/* Info overlay (Searching state) */}
              <motion.div
                 animate={{ 
@@ -728,8 +750,8 @@ function HorizontalLootCard({
                 }}
                 className="absolute inset-0 flex flex-col justify-center bg-transparent z-20"
              >
-                <div className="w-24 h-2 bg-white/10 rounded mb-2 animate-pulse" />
-                <div className="w-32 h-4 bg-white/10 rounded animate-pulse" />
+                <div className="w-20 h-2 bg-white/10 rounded mb-2 animate-pulse" />
+                <div className="w-28 h-3 bg-white/10 rounded animate-pulse" />
              </motion.div>
 
              {/* Real Info */}
@@ -746,9 +768,9 @@ function HorizontalLootCard({
                className="flex flex-col justify-center absolute inset-0 z-10"
              >
                 <div className="flex items-center gap-2 mb-1">
-                  <span className="text-xs uppercase font-bold tracking-widest drop-shadow-md" style={{ color: rarityConfig.color }}>{rarityConfig[lang]}</span>
+                  <span className="text-[10px] uppercase font-bold tracking-widest drop-shadow-md" style={{ color: rarityConfig.color }}>{rarityConfig[lang]}</span>
                 </div>
-                <h3 className="font-display font-bold text-xl text-white leading-none tracking-wide drop-shadow-md truncate">
+                <h3 className="font-display font-bold text-base text-white leading-none tracking-wide drop-shadow-md truncate">
                   {item.name[lang]}
                 </h3>
              </motion.div>
