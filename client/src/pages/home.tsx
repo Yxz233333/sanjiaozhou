@@ -133,7 +133,12 @@ export default function Home() {
   // Settings
   const [bgColor, setBgColor] = useState("#00FF00"); 
   const [layoutStyle, setLayoutStyle] = useState("classic");
-  const [animationSpeed, setAnimationSpeed] = useState([5]); 
+  const [animDelay, setAnimDelay] = useState([2000]); // 物品之间滚动间隔时间 (ms)
+  const [pauseBeforeExpand, setPauseBeforeExpand] = useState([500]); // 到中线后停留多久放大 (ms)
+  const [expandDuration, setExpandDuration] = useState([300]); // 放大缩小的动画持续时间 (ms)
+  const [pauseAfterExpand, setPauseAfterExpand] = useState([1000]); // 恢复后停留多久继续滚动 (ms)
+  const [cardScale, setCardScale] = useState([1]); // 物品大小缩放
+  const [expandScale, setExpandScale] = useState([1.5]); // 放大时的倍率
   
   // Workspace State
   const [activeCategory, setActiveCategory] = useState("1x1");
@@ -166,12 +171,14 @@ export default function Home() {
     setAnimatingItems([]);
     
     selectedList.forEach((item, index) => {
+      // 这里的触发时间是物品依次出现的时间间隔
       setTimeout(() => {
         setAnimatingItems(prev => [...prev, item]);
-      }, index * (1500 / animationSpeed[0]));
+      }, index * animDelay[0]);
     });
 
-    const totalTime = selectedList.length * (1500 / animationSpeed[0]) + 3000;
+    // 整个动画总时间估算：最后一个物品出现的时间 + 物品在屏幕上滚动的总时间
+    const totalTime = selectedList.length * animDelay[0] + 8000;
     setTimeout(() => {
       setIsPlaying(false);
     }, totalTime);
@@ -331,14 +338,20 @@ export default function Home() {
              </div>
 
              {/* Loot Overlay Container */}
-             <div className="absolute top-10 right-10 flex flex-col gap-2 w-[280px]">
+             <div className="absolute top-10 right-10 flex flex-col gap-2 w-[280px] pointer-events-none">
                <AnimatePresence>
                  {animatingItems.map((item, idx) => (
                    <LootCard 
                      key={item.uid} 
                      item={item} 
-                     layoutStyle={layoutStyle} 
                      lang={lang} 
+                     config={{
+                       pauseBeforeExpand: pauseBeforeExpand[0],
+                       expandDuration: expandDuration[0],
+                       pauseAfterExpand: pauseAfterExpand[0],
+                       cardScale: cardScale[0],
+                       expandScale: expandScale[0]
+                     }}
                    />
                  ))}
                </AnimatePresence>
@@ -350,40 +363,78 @@ export default function Home() {
             <div className="p-4 border-b border-slate-800 space-y-4 shrink-0 bg-[#0d0d0d]">
               <div className="flex items-center gap-4">
                 <div className="flex-1">
-                  <Label className="text-xs text-slate-400 mb-2 block">{t.bgColor}</Label>
+                  <Label className="text-[10px] text-slate-400 mb-2 block">{t.bgColor}</Label>
                   <div className="flex gap-2">
                     <button 
                       onClick={() => setBgColor("#00FF00")}
-                      className={cn("h-8 flex-1 rounded border transition-all text-xs font-medium text-black", bgColor === "#00FF00" ? 'border-white' : 'border-transparent')}
+                      className={cn("h-7 flex-1 rounded border transition-all text-xs font-medium text-black", bgColor === "#00FF00" ? 'border-white' : 'border-transparent')}
                       style={{ backgroundColor: "#00FF00" }}
                     >
                       Green
                     </button>
                     <button 
                       onClick={() => setBgColor("#000000")}
-                      className={cn("h-8 flex-1 rounded border transition-all text-xs font-medium text-white", bgColor === "#000000" ? 'border-emerald-500' : 'border-slate-700')}
+                      className={cn("h-7 flex-1 rounded border transition-all text-xs font-medium text-white", bgColor === "#000000" ? 'border-emerald-500' : 'border-slate-700')}
                       style={{ backgroundColor: "#000000" }}
                     >
                       Black
                     </button>
                   </div>
                 </div>
+              </div>
+
+              {/* Animation Control Sliders */}
+              <div className="grid grid-cols-2 gap-x-4 gap-y-3 pt-2">
+                <div className="space-y-1">
+                  <div className="flex justify-between items-center">
+                    <Label className="text-[10px] text-slate-400">出货间隔时间</Label>
+                    <span className="text-[10px] text-emerald-400">{animDelay[0]}ms</span>
+                  </div>
+                  <Slider value={animDelay} onValueChange={setAnimDelay} max={5000} min={500} step={100} className="py-1" />
+                </div>
                 
-                <div className="flex-1">
-                  <Label className="text-xs text-slate-400 mb-2 block">{t.animStyle}</Label>
-                  <Select value={layoutStyle} onValueChange={setLayoutStyle}>
-                    <SelectTrigger className="h-8 bg-slate-900 border-slate-800 text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="classic">{t.classic}</SelectItem>
-                      <SelectItem value="compact">{t.compact}</SelectItem>
-                    </SelectContent>
-                  </Select>
+                <div className="space-y-1">
+                  <div className="flex justify-between items-center">
+                    <Label className="text-[10px] text-slate-400">停留多久放大</Label>
+                    <span className="text-[10px] text-emerald-400">{pauseBeforeExpand[0]}ms</span>
+                  </div>
+                  <Slider value={pauseBeforeExpand} onValueChange={setPauseBeforeExpand} max={3000} min={100} step={100} className="py-1" />
+                </div>
+                
+                <div className="space-y-1">
+                  <div className="flex justify-between items-center">
+                    <Label className="text-[10px] text-slate-400">放大动画时长</Label>
+                    <span className="text-[10px] text-emerald-400">{expandDuration[0]}ms</span>
+                  </div>
+                  <Slider value={expandDuration} onValueChange={setExpandDuration} max={2000} min={100} step={100} className="py-1" />
+                </div>
+                
+                <div className="space-y-1">
+                  <div className="flex justify-between items-center">
+                    <Label className="text-[10px] text-slate-400">恢复后停留多久滚动</Label>
+                    <span className="text-[10px] text-emerald-400">{pauseAfterExpand[0]}ms</span>
+                  </div>
+                  <Slider value={pauseAfterExpand} onValueChange={setPauseAfterExpand} max={3000} min={100} step={100} className="py-1" />
+                </div>
+
+                <div className="space-y-1">
+                  <div className="flex justify-between items-center">
+                    <Label className="text-[10px] text-slate-400">卡片整体大小</Label>
+                    <span className="text-[10px] text-emerald-400">{cardScale[0]}x</span>
+                  </div>
+                  <Slider value={cardScale} onValueChange={setCardScale} max={2} min={0.5} step={0.1} className="py-1" />
+                </div>
+
+                <div className="space-y-1">
+                  <div className="flex justify-between items-center">
+                    <Label className="text-[10px] text-slate-400">搜索放大倍率</Label>
+                    <span className="text-[10px] text-emerald-400">{expandScale[0]}x</span>
+                  </div>
+                  <Slider value={expandScale} onValueChange={setExpandScale} max={3} min={1.1} step={0.1} className="py-1" />
                 </div>
               </div>
 
-              <div className="flex gap-3 pt-2">
+              <div className="flex gap-3 pt-4">
                 <Button 
                   className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white"
                   onClick={handlePlay}
@@ -470,49 +521,42 @@ export default function Home() {
 }
 
 // Separate component for the animated loot card
-function LootCard({ item, layoutStyle, lang }: { item: SelectedItem, layoutStyle: string, lang: "zh" | "en" }) {
+function LootCard({ 
+  item, 
+  lang,
+  config
+}: { 
+  item: SelectedItem, 
+  lang: "zh" | "en",
+  config: {
+    pauseBeforeExpand: number,
+    expandDuration: number,
+    pauseAfterExpand: number,
+    cardScale: number,
+    expandScale: number
+  }
+}) {
   const rarityConfig = RARITIES[item.rarity as keyof typeof RARITIES];
   const catIcon = CATEGORIES.find(c => c.id === item.category)?.icon || ImageIcon;
   
-  if (layoutStyle === "compact") {
-    return (
-      <motion.div
-        initial={{ opacity: 0, x: 50, scale: 0.95 }}
-        animate={{ opacity: 1, x: 0, scale: 1 }}
-        exit={{ opacity: 0, x: 20, transition: { duration: 0.2 } }}
-        transition={{ type: "spring", stiffness: 400, damping: 25 }}
-        className="flex items-center gap-2 bg-black/80 backdrop-blur-md border-l-[3px] border-y border-r border-y-white/10 border-r-white/10 p-1.5 shadow-xl"
-        style={{ borderLeftColor: rarityConfig.color, boxShadow: `-2px 0 10px -4px ${rarityConfig.color}` }}
-      >
-        <div className="w-8 h-8 bg-white/5 flex items-center justify-center border border-white/10 overflow-hidden">
-          {item.image ? (
-            <img src={item.image} alt="" className="w-6 h-6 object-contain drop-shadow-md" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
-          ) : null}
-          <ImageIcon className={cn("w-4 h-4 text-white/40", item.image ? "hidden" : "block")} />
-        </div>
-        <div className="flex-1 min-w-0 pr-2">
-          <h3 className="font-display font-bold text-white text-sm leading-tight truncate">{item.name[lang]}</h3>
-          <span className="text-[10px] uppercase tracking-wider font-bold" style={{ color: rarityConfig.color }}>
-            {rarityConfig[lang]}
-          </span>
-        </div>
-      </motion.div>
-    );
-  }
+  // Create a placeholder based on category
+  const placeholderType = item.category === "cards" ? "card_placeholder.png" : `placeholder_${item.category}.png`;
+  const placeholderImage = `/images/items/${placeholderType}`; // You'll need to add these images
 
-  // Classic Layout
   return (
     <motion.div
-      initial={{ opacity: 0, x: 100, height: 0, margin: 0 }}
-      animate={{ opacity: 1, x: 0, height: "auto", margin: "0.25rem 0" }}
-      exit={{ opacity: 0, y: -20, scale: 0.95, transition: { duration: 0.2 } }}
-      transition={{ 
-        type: "spring", 
-        stiffness: 300, 
-        damping: 24,
-        opacity: { duration: 0.2 }
-      }}
-      className="relative overflow-hidden group scale-90 origin-right"
+      initial={{ opacity: 0, x: 100, scale: config.cardScale * 0.9 }}
+      animate={[
+        // Phase 1: Slide in and wait
+        { opacity: 1, x: 0, scale: config.cardScale, transition: { type: "spring", stiffness: 300, damping: 24 } },
+        // Phase 2: Expand to center (simulated by scale up)
+        { scale: config.cardScale * config.expandScale, transition: { delay: config.pauseBeforeExpand / 1000, duration: config.expandDuration / 1000 } },
+        // Phase 3: Shrink back and continue
+        { scale: config.cardScale, transition: { delay: (config.pauseBeforeExpand + config.expandDuration + config.pauseAfterExpand) / 1000, duration: config.expandDuration / 1000 } }
+      ]}
+      exit={{ opacity: 0, y: -20, scale: config.cardScale * 0.9, transition: { duration: 0.2 } }}
+      className="relative overflow-hidden group origin-right mx-auto"
+      style={{ width: '280px', transformOrigin: 'center' }}
     >
       {/* Angled cut background typical in tactical UI */}
       <div 
@@ -527,28 +571,68 @@ function LootCard({ item, layoutStyle, lang }: { item: SelectedItem, layoutStyle
         initial={{ scaleY: 0 }}
         animate={{ scaleY: 1 }}
         transition={{ delay: 0.2, duration: 0.3 }}
-        className="absolute left-0 top-0 bottom-0 w-1 origin-top"
+        className="absolute left-0 top-0 bottom-0 w-1 origin-top z-20"
         style={{ backgroundColor: rarityConfig.color, boxShadow: `0 0 8px ${rarityConfig.color}` }}
       />
 
       <div className="relative p-2 pl-4 flex items-center gap-3">
         {/* Item Icon placeholder or Image */}
-        <div className="w-10 h-10 bg-gradient-to-br from-white/10 to-transparent border border-white/20 flex items-center justify-center shadow-inner relative overflow-hidden">
+        <div className="w-12 h-12 bg-gradient-to-br from-white/10 to-transparent border border-white/20 flex items-center justify-center shadow-inner relative overflow-hidden shrink-0">
           <div className="absolute inset-0 opacity-20" style={{ backgroundColor: rarityConfig.color }} />
-          {item.image ? (
-            <img src={item.image} alt="" className="w-8 h-8 object-contain z-10 drop-shadow-md" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
-          ) : null}
-          <ImageIcon className={cn("w-5 h-5 text-white/80 z-10", item.image ? "hidden" : "block")} />
+          
+          <motion.div 
+            animate={{ 
+              opacity: [1, 1, 0, 0], // Show placeholder -> Hide placeholder
+              scale: [1, 1, 0.8, 0.8]
+            }}
+            transition={{ 
+              times: [0, 0.9, 1, 1], 
+              duration: (config.pauseBeforeExpand + config.expandDuration) / 1000 
+            }}
+            className="absolute inset-0 flex items-center justify-center bg-slate-900"
+          >
+            {/* 搜查前的状态图 */}
+            <img src={placeholderImage} alt="unsearched" className="w-10 h-10 object-contain opacity-50" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+            <span className="text-[7px] text-white/40 absolute bottom-0.5 font-display tracking-widest">SEARCH</span>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ 
+              opacity: [0, 0, 1, 1], // Hide real item -> Show real item
+              scale: [0.8, 0.8, 1, 1]
+            }}
+            transition={{ 
+              times: [0, 0.9, 1, 1], 
+              duration: (config.pauseBeforeExpand + config.expandDuration) / 1000 
+            }}
+            className="absolute inset-0 flex items-center justify-center"
+          >
+            {item.image ? (
+              <img src={item.image} alt="" className="w-10 h-10 object-contain z-10 drop-shadow-md" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
+            ) : null}
+            <ImageIcon className={cn("w-6 h-6 text-white/80 z-10", item.image ? "hidden" : "block")} />
+          </motion.div>
         </div>
 
         {/* Info */}
-        <div className="flex-1 flex flex-col justify-center pr-4">
-          <div className="flex items-center gap-2 mb-0.5">
-            <span className="text-[9px] text-white/50 uppercase tracking-widest">{rarityConfig[lang]}</span>
-          </div>
-          <h3 className="font-display font-bold text-base text-white leading-none tracking-wide drop-shadow-md">
+        <div className="flex-1 flex flex-col justify-center pr-4 overflow-hidden">
+          <motion.div 
+            initial={{ opacity: 0, x: -10 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: (config.pauseBeforeExpand + config.expandDuration) / 1000 }}
+            className="flex items-center gap-2 mb-0.5"
+          >
+            <span className="text-[10px] uppercase font-bold tracking-widest drop-shadow-md" style={{ color: rarityConfig.color }}>{rarityConfig[lang]}</span>
+          </motion.div>
+          <motion.h3 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: (config.pauseBeforeExpand + config.expandDuration) / 1000 }}
+            className="font-display font-bold text-lg text-white leading-none tracking-wide drop-shadow-md truncate"
+          >
             {item.name[lang]}
-          </h3>
+          </motion.h3>
         </div>
       </div>
     </motion.div>
