@@ -17,6 +17,7 @@ import {
   Globe
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import MOCK_ITEMS_DATA from "../data.json";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -120,9 +121,7 @@ const CATEGORIES = [
   { id: "cards", icon: FileText, subcategories: ["red_card", "gold_card", "purple_card", "blue_card"] },
 ];
 
-const MOCK_ITEMS: { id: string, category: string, subcategory?: string, rarity: string, name: {zh: string, en: string}, image?: string }[] = [
-  // 等待您提供物品清单后，我会将您的专属物品添加到这里
-];
+const MOCK_ITEMS: { id: string, category: string, subcategory?: string, rarity: string, name: {zh: string, en: string}, image?: string }[] = MOCK_ITEMS_DATA;
 
 type ItemType = typeof MOCK_ITEMS[0];
 type SelectedItem = ItemType & { uid: string };
