@@ -156,7 +156,7 @@ function SortableItem({
   item: SelectedItem, 
   lang: "zh" | "en", 
   onRemove: (uid: string) => void,
-  onTimeChange: (uid: string, time: string) => void
+  onTimeChange: (uid: string, field: 'min' | 'sec' | 'ms', time: string) => void
 }) {
   const {
     attributes,
@@ -175,6 +175,11 @@ function SortableItem({
   };
 
   const rarityConfig = RARITIES[item.rarity as keyof typeof RARITIES];
+
+  const currentTime = item.fixedTime || 0;
+  const currentMin = item.fixedTime !== undefined ? Math.floor(currentTime / 60000) : "";
+  const currentSec = item.fixedTime !== undefined ? Math.floor((currentTime % 60000) / 1000) : "";
+  const currentMs = item.fixedTime !== undefined ? currentTime % 1000 : "";
 
   return (
     <div
@@ -213,15 +218,36 @@ function SortableItem({
       <div className="flex items-center gap-2 shrink-0">
         <div className="flex items-center gap-1 bg-slate-950 px-2 py-1 rounded border border-slate-800 group-hover:border-slate-700 transition-colors">
           <Clock className="w-3 h-3 text-slate-500" />
-          <input 
-            type="number"
-            placeholder="ms"
-            value={item.fixedTime || ""}
-            onChange={(e) => onTimeChange(item.uid, e.target.value)}
-            className="w-12 bg-transparent text-xs text-slate-300 outline-none placeholder:text-slate-700 font-mono"
-            min="0"
-            step="100"
-          />
+          <div className="flex items-center gap-0.5 text-xs text-slate-400">
+            <input 
+              type="number"
+              placeholder="00"
+              value={currentMin}
+              onChange={(e) => onTimeChange(item.uid, 'min', e.target.value)}
+              className="w-6 bg-transparent text-slate-300 outline-none placeholder:text-slate-700 text-right hide-arrows"
+              min="0"
+            />
+            <span>:</span>
+            <input 
+              type="number"
+              placeholder="00"
+              value={currentSec}
+              onChange={(e) => onTimeChange(item.uid, 'sec', e.target.value)}
+              className="w-6 bg-transparent text-slate-300 outline-none placeholder:text-slate-700 text-center hide-arrows"
+              min="0"
+              max="59"
+            />
+            <span>.</span>
+            <input 
+              type="number"
+              placeholder="000"
+              value={currentMs}
+              onChange={(e) => onTimeChange(item.uid, 'ms', e.target.value)}
+              className="w-8 bg-transparent text-slate-300 outline-none placeholder:text-slate-700 text-left hide-arrows"
+              min="0"
+              max="999"
+            />
+          </div>
         </div>
         
         <button 
@@ -294,11 +320,27 @@ export default function Home() {
     }
   };
 
-  const handleTimeChange = (uid: string, timeValue: string) => {
-    const time = timeValue === "" ? undefined : parseInt(timeValue, 10);
-    setSelectedList(prev => prev.map(item => 
-      item.uid === uid ? { ...item, fixedTime: time } : item
-    ));
+  const handleTimeChange = (uid: string, field: 'min' | 'sec' | 'ms', value: string) => {
+    let numValue = parseInt(value, 10);
+    if (isNaN(numValue)) numValue = 0;
+    
+    setSelectedList(prev => prev.map(item => {
+      if (item.uid !== uid) return item;
+      
+      const currentTime = item.fixedTime || 0;
+      const currentMin = Math.floor(currentTime / 60000);
+      const currentSec = Math.floor((currentTime % 60000) / 1000);
+      const currentMs = currentTime % 1000;
+      
+      let newTime = 0;
+      if (field === 'min') newTime = (numValue * 60000) + (currentSec * 1000) + currentMs;
+      if (field === 'sec') newTime = (currentMin * 60000) + (numValue * 1000) + currentMs;
+      if (field === 'ms') newTime = (currentMin * 60000) + (currentSec * 1000) + numValue;
+      
+      // If all fields are 0 and they cleared the input, maybe we want to remove the fixedTime
+      // But keeping it as 0 is also fine if they explicitly set it. We'll set to undefined if it's 0 to keep it clean.
+      return { ...item, fixedTime: newTime === 0 && value === "" ? undefined : newTime };
+    }));
   };
 
   const handlePlay = () => {
