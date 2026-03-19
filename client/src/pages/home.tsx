@@ -97,11 +97,11 @@ const i18n = {
 };
 
 const RARITIES = {
-  common: { en: "Common", zh: "普通", color: "#d1d5db" },
-  uncommon: { en: "Uncommon", zh: "罕见", color: "#10b981" },
-  rare: { en: "Rare", zh: "稀有", color: "#3b82f6" },
-  epic: { en: "Epic", zh: "史诗", color: "#8b5cf6" },
-  legendary: { en: "Legendary", zh: "传说", color: "#f59e0b" },
+  common: { en: "Common", zh: "普通", color: "#ef4444" },
+  uncommon: { en: "Uncommon", zh: "罕见", color: "#ef4444" },
+  rare: { en: "Rare", zh: "稀有", color: "#ef4444" },
+  epic: { en: "Epic", zh: "史诗", color: "#ef4444" },
+  legendary: { en: "Legendary", zh: "传说", color: "#ef4444" },
   mythic: { en: "Mythic", zh: "神话", color: "#ef4444" },
 };
 
@@ -139,6 +139,8 @@ export default function Home() {
   const [pauseAfterExpand, setPauseAfterExpand] = useState([1000]); // 恢复后停留多久继续滚动 (ms)
   const [cardScale, setCardScale] = useState([1]); // 物品大小缩放
   const [expandScale, setExpandScale] = useState([1.5]); // 放大时的倍率
+  const [maxStackedItems, setMaxStackedItems] = useState([3]); // 最大同屏堆叠数量
+  const [itemLifetime, setItemLifespan] = useState([8000]); // 物品总存活时间
   
   // Workspace State
   const [activeCategory, setActiveCategory] = useState("1x1");
@@ -170,10 +172,17 @@ export default function Home() {
     setIsPlaying(true);
     setAnimatingItems([]);
     
-    // We handle the completion ourselves inside the items
     selectedList.forEach((item, index) => {
       setTimeout(() => {
-        setAnimatingItems(prev => [...prev, { ...item, uid: Math.random().toString() }]);
+        setAnimatingItems(prev => {
+          // If we reach max stack, kick out the oldest item by slicing
+          const newItem = { ...item, uid: Math.random().toString() };
+          const updated = [...prev, newItem];
+          if (updated.length > maxStackedItems[0]) {
+            return updated.slice(updated.length - maxStackedItems[0]);
+          }
+          return updated;
+        });
       }, index * animDelay[0]);
     });
   };
@@ -375,7 +384,8 @@ export default function Home() {
                          pauseAfterExpand: pauseAfterExpand[0],
                          cardScale: cardScale[0],
                          expandScale: expandScale[0],
-                         totalItems: animatingItems.length
+                         totalItems: animatingItems.length,
+                         lifetime: itemLifetime[0]
                        }}
                        onComplete={handleItemComplete}
                      />
@@ -458,6 +468,21 @@ export default function Home() {
                     <span className="text-[10px] text-emerald-400">{expandScale[0]}x</span>
                   </div>
                   <Slider value={expandScale} onValueChange={setExpandScale} max={3} min={1.1} step={0.1} className="py-1" />
+                </div>
+                <div className="space-y-1">
+                  <div className="flex justify-between items-center">
+                    <Label className="text-[10px] text-slate-400">同屏最大数量</Label>
+                    <span className="text-[10px] text-emerald-400">{maxStackedItems[0]}个</span>
+                  </div>
+                  <Slider value={maxStackedItems} onValueChange={setMaxStackedItems} max={10} min={1} step={1} className="py-1" />
+                </div>
+                
+                <div className="space-y-1">
+                  <div className="flex justify-between items-center">
+                    <Label className="text-[10px] text-slate-400">消失时间</Label>
+                    <span className="text-[10px] text-emerald-400">{itemLifetime[0]}ms</span>
+                  </div>
+                  <Slider value={itemLifetime} onValueChange={setItemLifespan} max={15000} min={1000} step={500} className="py-1" />
                 </div>
               </div>
 
@@ -577,14 +602,15 @@ function HorizontalLootCard({
 
   const controls = useAnimation();
 
-  // Time calculations (all in seconds for Framer Motion)
-  const T_start_to_center = 1.0; // Time it takes to travel from right edge to center
+  const T_total_lifespan = config.lifetime / 1000;
+  
+  // Calculate relative times based on total lifespan to make sure they fit
+  const T_start_to_center = T_total_lifespan * 0.2; // 20% of time sliding in
   const T_pause_before = config.pauseBeforeExpand / 1000;
   const T_expand = config.expandDuration / 1000;
   const T_pause_after = config.pauseAfterExpand / 1000;
-  const T_center_to_left = 1.0; // Time to travel from center to left edge
-
-  const T_total_lifespan = T_start_to_center + T_pause_before + T_expand + T_pause_after + T_center_to_left;
+  // Make sure we have time left for the exit animation
+  const T_center_to_left = Math.max(0.5, T_total_lifespan - T_start_to_center - T_pause_before - T_expand - T_pause_after);
 
   useEffect(() => {
     const sequence = async () => {
@@ -631,6 +657,7 @@ function HorizontalLootCard({
     <motion.div
       initial={{ x: "150vw", scale: config.cardScale, opacity: 0 }}
       animate={controls}
+      exit={{ opacity: 0, scale: 0.8, transition: { duration: 0.3 } }}
       className="absolute flex items-center justify-center pointer-events-none"
       style={{ zIndex: config.totalItems - index }} 
     >
