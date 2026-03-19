@@ -120,35 +120,11 @@ const CATEGORIES = [
   { id: "cards", icon: FileText, subcategories: ["red_card", "gold_card", "purple_card", "blue_card"] },
 ];
 
-const MOCK_ITEMS = [
-  // 1x1
-  { id: "i1", category: "1x1", rarity: "common", name: { zh: "螺丝刀", en: "Screwdriver" } },
-  { id: "i2", category: "1x1", rarity: "uncommon", name: { zh: "胶带", en: "Duct Tape" } },
-  
-  // 1x2
-  { id: "i3", category: "1x2", rarity: "rare", name: { zh: "弹匣", en: "Magazine" } },
-  { id: "i4", category: "1x2", rarity: "common", name: { zh: "止痛药", en: "Painkillers" } },
-  
-  // 2x1
-  { id: "i5", category: "2x1", rarity: "uncommon", name: { zh: "急救包", en: "Medkit" } },
-  
-  // 2x2
-  { id: "i6", category: "2x2", rarity: "epic", name: { zh: "防弹头盔", en: "Ballistic Helmet" } },
-  
-  // 3x2
-  { id: "i7", category: "3x2", rarity: "epic", name: { zh: "MP5 冲锋枪", en: "MP5 SMG" } },
-  
-  // 4x2
-  { id: "i8", category: "4x2", rarity: "legendary", name: { zh: "M4A1 突击步枪", en: "M4A1 Assault Rifle" }, image: "/images/items/m4a1.png" },
-  
-  // Cards
-  { id: "c1", category: "cards", subcategory: "red_card", rarity: "mythic", name: { zh: "零号大坝机密门卡", en: "Dam Red Card" } },
-  { id: "c2", category: "cards", subcategory: "gold_card", rarity: "legendary", name: { zh: "行政区主控金卡", en: "Admin Gold Card" } },
-  { id: "c3", category: "cards", subcategory: "purple_card", rarity: "epic", name: { zh: "武器库紫卡", en: "Armory Purple Card" } },
-  { id: "c4", category: "cards", subcategory: "blue_card", rarity: "rare", name: { zh: "医疗室蓝卡", en: "Medical Blue Card" } },
+const MOCK_ITEMS: { id: string, category: string, subcategory?: string, rarity: string, name: {zh: string, en: string}, image?: string }[] = [
+  // 等待您提供物品清单后，我会将您的专属物品添加到这里
 ];
 
-type ItemType = typeof MOCK_ITEMS[0] & { image?: string };
+type ItemType = typeof MOCK_ITEMS[0];
 type SelectedItem = ItemType & { uid: string };
 
 export default function Home() {
