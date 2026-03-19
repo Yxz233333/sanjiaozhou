@@ -28,12 +28,23 @@ const i18n = {
   zh: {
     title: "三角洲行动 - 出货UI生成器",
     categories: "物品分类",
-    weapon: "武器",
-    armor: "护甲",
-    consumable: "消耗品",
-    intel: "情报",
-    ordnance: "投掷物",
-    misc: "杂项",
+    "1x1": "1x1",
+    "1x2": "1x2",
+    "1x4": "1x4",
+    "2x1": "2x1",
+    "2x2": "2x2",
+    "2x3": "2x3",
+    "3x2": "3x2",
+    "3x3": "3x3",
+    "3x4": "3x4",
+    "4x2": "4x2",
+    "4x3": "4x3",
+    "4x4": "4x4",
+    "cards": "门禁卡",
+    red_card: "红卡",
+    gold_card: "金卡",
+    purple_card: "紫卡",
+    blue_card: "蓝卡",
     selectedItems: "已选出货",
     emptySelected: "暂未选择物品，请从左侧点击添加",
     canvasSettings: "画布设置",
@@ -51,12 +62,23 @@ const i18n = {
   en: {
     title: "Delta Force - Loot UI Generator",
     categories: "Categories",
-    weapon: "Weapons",
-    armor: "Armor",
-    consumable: "Consumables",
-    intel: "Intel",
-    ordnance: "Ordnance",
-    misc: "Misc",
+    "1x1": "1x1",
+    "1x2": "1x2",
+    "1x4": "1x4",
+    "2x1": "2x1",
+    "2x2": "2x2",
+    "2x3": "2x3",
+    "3x2": "3x2",
+    "3x3": "3x3",
+    "3x4": "3x4",
+    "4x2": "4x2",
+    "4x3": "4x3",
+    "4x4": "4x4",
+    "cards": "Cards",
+    red_card: "Red Card",
+    gold_card: "Gold Card",
+    purple_card: "Purple Card",
+    blue_card: "Blue Card",
     selectedItems: "Selected Loot",
     emptySelected: "No items selected, click items on the left to add",
     canvasSettings: "Canvas Settings",
@@ -83,55 +105,47 @@ const RARITIES = {
 };
 
 const CATEGORIES = [
-  { id: "weapon", icon: Crosshair },
-  { id: "armor", icon: Shield },
-  { id: "consumable", icon: Pill },
-  { id: "intel", icon: FileText },
-  { id: "ordnance", icon: Bomb },
-  { id: "misc", icon: Package },
+  { id: "1x1", icon: SquareSquare },
+  { id: "1x2", icon: SquareSquare },
+  { id: "1x4", icon: SquareSquare },
+  { id: "2x1", icon: SquareSquare },
+  { id: "2x2", icon: SquareSquare },
+  { id: "2x3", icon: SquareSquare },
+  { id: "3x2", icon: SquareSquare },
+  { id: "3x3", icon: SquareSquare },
+  { id: "3x4", icon: SquareSquare },
+  { id: "4x2", icon: SquareSquare },
+  { id: "4x3", icon: SquareSquare },
+  { id: "4x4", icon: SquareSquare },
+  { id: "cards", icon: FileText, subcategories: ["red_card", "gold_card", "purple_card", "blue_card"] },
 ];
 
 const MOCK_ITEMS = [
-  // Weapons
-  { id: "w1", category: "weapon", rarity: "epic", name: { zh: "M4A1 突击步枪", en: "M4A1 Assault Rifle" }, image: "/images/items/m4a1.png" },
-  { id: "w2", category: "weapon", rarity: "rare", name: { zh: "AK-47 突击步枪", en: "AK-47 Assault Rifle" } },
-  { id: "w3", category: "weapon", rarity: "rare", name: { zh: "MP5 冲锋枪", en: "MP5 SMG" } },
-  { id: "w4", category: "weapon", rarity: "legendary", name: { zh: "AWM 狙击步枪", en: "AWM Sniper Rifle" } },
-  { id: "w5", category: "weapon", rarity: "uncommon", name: { zh: "P90 冲锋枪", en: "P90 SMG" } },
-  { id: "w6", category: "weapon", rarity: "common", name: { zh: "M1911 手枪", en: "M1911 Pistol" } },
-  { id: "w7", category: "weapon", rarity: "mythic", name: { zh: "Vector 冲锋枪", en: "Vector SMG" } },
+  // 1x1
+  { id: "i1", category: "1x1", rarity: "common", name: { zh: "螺丝刀", en: "Screwdriver" } },
+  { id: "i2", category: "1x1", rarity: "uncommon", name: { zh: "胶带", en: "Duct Tape" } },
   
-  // Armor
-  { id: "a1", category: "armor", rarity: "epic", name: { zh: "四级战术背心", en: "Lvl 4 Tactical Vest" } },
-  { id: "a2", category: "armor", rarity: "rare", name: { zh: "三级头盔", en: "Lvl 3 Helmet" } },
-  { id: "a3", category: "armor", rarity: "uncommon", name: { zh: "防弹面罩", en: "Ballistic Mask" } },
-  { id: "a4", category: "armor", rarity: "legendary", name: { zh: "重型防弹衣", en: "Heavy Armor" } },
-  { id: "a5", category: "armor", rarity: "common", name: { zh: "轻型防弹衣", en: "Light Armor" } },
+  // 1x2
+  { id: "i3", category: "1x2", rarity: "rare", name: { zh: "弹匣", en: "Magazine" } },
+  { id: "i4", category: "1x2", rarity: "common", name: { zh: "止痛药", en: "Painkillers" } },
   
-  // Consumables
-  { id: "c1", category: "consumable", rarity: "common", name: { zh: "急救包", en: "Medkit" } },
-  { id: "c2", category: "consumable", rarity: "common", name: { zh: "止痛药", en: "Painkillers" } },
-  { id: "c3", category: "consumable", rarity: "common", name: { zh: "能量饮料", en: "Energy Drink" } },
-  { id: "c4", category: "consumable", rarity: "rare", name: { zh: "战术医疗箱", en: "Tactical Medkit" } },
-  { id: "c5", category: "consumable", rarity: "epic", name: { zh: "便携手术包", en: "Surgical Kit" } },
+  // 2x1
+  { id: "i5", category: "2x1", rarity: "uncommon", name: { zh: "急救包", en: "Medkit" } },
   
-  // Intel
-  { id: "i1", category: "intel", rarity: "mythic", name: { zh: "加密U盘", en: "Encrypted Flash Drive" } },
-  { id: "i2", category: "intel", rarity: "legendary", name: { zh: "机密文件", en: "Classified Documents" } },
-  { id: "i3", category: "intel", rarity: "uncommon", name: { zh: "硬盘", en: "Hard Drive" } },
-  { id: "i4", category: "intel", rarity: "epic", name: { zh: "军密录音", en: "Military Recording" } },
+  // 2x2
+  { id: "i6", category: "2x2", rarity: "epic", name: { zh: "防弹头盔", en: "Ballistic Helmet" } },
   
-  // Ordnance
-  { id: "o1", category: "ordnance", rarity: "common", name: { zh: "破片手雷", en: "Frag Grenade" } },
-  { id: "o2", category: "ordnance", rarity: "common", name: { zh: "闪光弹", en: "Flashbang" } },
-  { id: "o3", category: "ordnance", rarity: "common", name: { zh: "烟雾弹", en: "Smoke Grenade" } },
-  { id: "o4", category: "ordnance", rarity: "rare", name: { zh: "铝热剂", en: "Thermite" } },
+  // 3x2
+  { id: "i7", category: "3x2", rarity: "epic", name: { zh: "MP5 冲锋枪", en: "MP5 SMG" } },
   
-  // Misc
-  { id: "m1", category: "misc", rarity: "common", name: { zh: "螺丝刀", en: "Screwdriver" } },
-  { id: "m2", category: "misc", rarity: "uncommon", name: { zh: "胶带", en: "Duct Tape" } },
-  { id: "m3", category: "misc", rarity: "rare", name: { zh: "电子元件", en: "Electronic Parts" } },
-  { id: "m4", category: "misc", rarity: "legendary", name: { zh: "金条", en: "Gold Bar" } },
+  // 4x2
+  { id: "i8", category: "4x2", rarity: "legendary", name: { zh: "M4A1 突击步枪", en: "M4A1 Assault Rifle" }, image: "/images/items/m4a1.png" },
+  
+  // Cards
+  { id: "c1", category: "cards", subcategory: "red_card", rarity: "mythic", name: { zh: "零号大坝机密门卡", en: "Dam Red Card" } },
+  { id: "c2", category: "cards", subcategory: "gold_card", rarity: "legendary", name: { zh: "行政区主控金卡", en: "Admin Gold Card" } },
+  { id: "c3", category: "cards", subcategory: "purple_card", rarity: "epic", name: { zh: "武器库紫卡", en: "Armory Purple Card" } },
+  { id: "c4", category: "cards", subcategory: "blue_card", rarity: "rare", name: { zh: "医疗室蓝卡", en: "Medical Blue Card" } },
 ];
 
 type ItemType = typeof MOCK_ITEMS[0] & { image?: string };
@@ -147,13 +161,20 @@ export default function Home() {
   const [animationSpeed, setAnimationSpeed] = useState([5]); 
   
   // Workspace State
-  const [activeCategory, setActiveCategory] = useState("weapon");
+  const [activeCategory, setActiveCategory] = useState("1x1");
+  const [activeSubcategory, setActiveSubcategory] = useState<string | null>(null);
   const [selectedList, setSelectedList] = useState<SelectedItem[]>([]);
   const [isPlaying, setIsPlaying] = useState(false);
   const [animatingItems, setAnimatingItems] = useState<SelectedItem[]>([]);
 
   // Derived
-  const filteredItems = MOCK_ITEMS.filter(item => item.category === activeCategory);
+  const filteredItems = MOCK_ITEMS.filter(item => {
+    if (item.category !== activeCategory) return false;
+    if (activeCategory === "cards" && activeSubcategory && item.subcategory !== activeSubcategory) return false;
+    return true;
+  });
+
+  const activeCategoryData = CATEGORIES.find(c => c.id === activeCategory);
 
   const handleAddItem = (item: ItemType) => {
     setSelectedList(prev => [...prev, { ...item, uid: Math.random().toString(36).substr(2, 9) }]);
@@ -213,7 +234,7 @@ export default function Home() {
         <div className="flex-1 flex flex-col border-r border-slate-800 bg-[#0d0d0d] relative">
           
           {/* Categories Nav */}
-          <div className="p-4 border-b border-slate-800/60 bg-[#111]/50 backdrop-blur shrink-0">
+          <div className="p-4 border-b border-slate-800/60 bg-[#111]/50 backdrop-blur shrink-0 flex flex-col gap-3">
             <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-none">
               {CATEGORIES.map(cat => {
                 const Icon = cat.icon;
@@ -221,7 +242,10 @@ export default function Home() {
                 return (
                   <button
                     key={cat.id}
-                    onClick={() => setActiveCategory(cat.id)}
+                    onClick={() => {
+                      setActiveCategory(cat.id);
+                      setActiveSubcategory(cat.subcategories ? cat.subcategories[0] : null);
+                    }}
                     className={cn(
                       "flex items-center gap-2 px-4 py-2.5 rounded-md transition-all whitespace-nowrap border font-medium text-sm font-display tracking-wider",
                       isActive 
@@ -230,11 +254,34 @@ export default function Home() {
                     )}
                   >
                     <Icon className="w-4 h-4" />
-                    {t[cat.id as keyof typeof t]}
+                    {t[cat.id as keyof typeof t] || cat.id}
                   </button>
                 )
               })}
             </div>
+            
+            {/* Subcategories (if any) */}
+            {activeCategoryData?.subcategories && (
+              <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-none">
+                {activeCategoryData.subcategories.map(subcat => {
+                  const isActive = activeSubcategory === subcat;
+                  return (
+                    <button
+                      key={subcat}
+                      onClick={() => setActiveSubcategory(subcat)}
+                      className={cn(
+                        "px-3 py-1.5 rounded transition-all whitespace-nowrap border text-xs font-display tracking-wider",
+                        isActive 
+                          ? "bg-emerald-500 text-white border-emerald-500" 
+                          : "bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700"
+                      )}
+                    >
+                      {t[subcat as keyof typeof t] || subcat}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {/* Items Grid */}
