@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { Link } from "wouter";
 import { motion, AnimatePresence, useAnimation } from "framer-motion";
 import { 
   Settings, 
@@ -19,7 +20,8 @@ import {
   Clock,
   MoreVertical,
   Maximize2,
-  Plus
+  Plus,
+  Video
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import MOCK_ITEMS_DATA from "../data.json";
@@ -533,15 +535,26 @@ export default function Home() {
           </h1>
         </div>
         
-        <Button 
-          variant="outline" 
-          size="sm" 
-          onClick={() => setLang(lang === 'zh' ? 'en' : 'zh')}
-          className="bg-slate-900 border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white"
-        >
-          <Globe className="w-4 h-4 mr-2" />
-          {lang === 'zh' ? 'English' : '中文'}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Link href="/video">
+            <Button
+              size="sm"
+              className="bg-violet-600 hover:bg-violet-500 text-white border-0 gap-2"
+            >
+              <Video className="w-4 h-4" />
+              {lang === 'zh' ? '视频导出' : 'Video Export'}
+            </Button>
+          </Link>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => setLang(lang === 'zh' ? 'en' : 'zh')}
+            className="bg-slate-900 border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white"
+          >
+            <Globe className="w-4 h-4 mr-2" />
+            {lang === 'zh' ? 'English' : '中文'}
+          </Button>
+        </div>
       </header>
 
       {/* MAIN WORKSPACE */}
