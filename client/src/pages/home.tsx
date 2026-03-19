@@ -35,7 +35,10 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
   ContextMenuLabel,
-  ContextMenuSeparator
+  ContextMenuSeparator,
+  ContextMenuSub,
+  ContextMenuSubTrigger,
+  ContextMenuSubContent
 } from "@/components/ui/context-menu";
 import { 
   Dialog,
@@ -167,6 +170,7 @@ type SelectedItem = ItemType & {
   uid: string, 
   fixedTime?: number,
   customScale?: number,
+  customDuration?: number,
   isTextOnly?: boolean,
   textContent?: string
 };
@@ -177,13 +181,15 @@ function SortableItem({
   lang, 
   onRemove, 
   onTimeChange,
-  onScaleChange
+  onScaleChange,
+  onDurationChange
 }: { 
   item: SelectedItem, 
   lang: "zh" | "en", 
   onRemove: (uid: string) => void,
   onTimeChange: (uid: string, field: 'min' | 'sec' | 'ms', time: string) => void,
-  onScaleChange: (uid: string, scale: number) => void
+  onScaleChange: (uid: string, scale: number) => void,
+  onDurationChange: (uid: string, duration: number) => void
 }) {
   const {
     attributes,
@@ -297,17 +303,46 @@ function SortableItem({
         </div>
       </ContextMenuTrigger>
       <ContextMenuContent className="w-48 bg-slate-900 border-slate-800 text-slate-200">
-        <ContextMenuLabel className="text-xs text-slate-500">单独放大倍率</ContextMenuLabel>
-        <ContextMenuSeparator className="bg-slate-800" />
-        {[1, 1.5, 2, 2.5, 3].map((scale) => (
-          <ContextMenuItem 
-            key={scale}
-            onClick={() => onScaleChange(item.uid, scale)}
-            className="focus:bg-emerald-500/20 focus:text-emerald-400 cursor-pointer text-sm"
-          >
-            {scale}x {item.customScale === scale && " (当前)"}
-          </ContextMenuItem>
-        ))}
+        <ContextMenuSub>
+          <ContextMenuSubTrigger className="focus:bg-emerald-500/20 focus:text-emerald-400 text-sm">
+            单独放大倍率
+          </ContextMenuSubTrigger>
+          <ContextMenuSubContent className="w-32 bg-slate-900 border-slate-800 text-slate-200">
+            {[1, 1.5, 2, 2.5, 3].map((scale) => (
+              <ContextMenuItem 
+                key={scale}
+                onClick={() => onScaleChange(item.uid, scale)}
+                className="focus:bg-emerald-500/20 focus:text-emerald-400 cursor-pointer text-sm"
+              >
+                {scale}x {item.customScale === scale && " (当前)"}
+              </ContextMenuItem>
+            ))}
+          </ContextMenuSubContent>
+        </ContextMenuSub>
+        
+        <ContextMenuSub>
+          <ContextMenuSubTrigger className="focus:bg-emerald-500/20 focus:text-emerald-400 text-sm">
+            单独停留时间
+          </ContextMenuSubTrigger>
+          <ContextMenuSubContent className="w-36 bg-slate-900 border-slate-800 text-slate-200">
+            <ContextMenuItem 
+              onClick={() => onDurationChange(item.uid, undefined)}
+              className="focus:bg-emerald-500/20 focus:text-emerald-400 cursor-pointer text-sm"
+            >
+              默认设置 {item.customDuration === undefined && " (当前)"}
+            </ContextMenuItem>
+            <ContextMenuSeparator className="bg-slate-800" />
+            {[3000, 5000, 8000, 10000, 15000, 20000].map((duration) => (
+              <ContextMenuItem 
+                key={duration}
+                onClick={() => onDurationChange(item.uid, duration)}
+                className="focus:bg-emerald-500/20 focus:text-emerald-400 cursor-pointer text-sm"
+              >
+                {duration / 1000}秒 {item.customDuration === duration && " (当前)"}
+              </ContextMenuItem>
+            ))}
+          </ContextMenuSubContent>
+        </ContextMenuSub>
       </ContextMenuContent>
     </ContextMenu>
   );
@@ -398,6 +433,12 @@ export default function Home() {
   const handleScaleChange = (uid: string, scale: number) => {
     setSelectedList(prev => prev.map(item => 
       item.uid === uid ? { ...item, customScale: scale } : item
+    ));
+  };
+
+  const handleDurationChange = (uid: string, duration: number | undefined) => {
+    setSelectedList(prev => prev.map(item => 
+      item.uid === uid ? { ...item, customDuration: duration } : item
     ));
   };
 
@@ -828,6 +869,7 @@ export default function Home() {
                               onRemove={handleRemoveItem}
                               onTimeChange={handleTimeChange}
                               onScaleChange={handleScaleChange}
+                              onDurationChange={handleDurationChange}
                             />
                           ))}
                         </div>
@@ -871,7 +913,7 @@ function StackedLootCard({
 
   const controls = useAnimation();
   
-  const T_total_lifespan = config.lifetime / 1000;
+  const T_total_lifespan = (item.customDuration ? item.customDuration : config.lifetime) / 1000;
   
   // 动画时间分配
   const T_start_to_center = 0.5; // 从右侧滑入的时间
