@@ -1,0 +1,55 @@
+# 如何添加和管理物品图片 (How to add item images)
+
+因为您要将这个项目部署为静态网站，所有的图片资源需要放在前端公开目录下。以下是添加图片和关联数据的具体步骤：
+
+## 1. 图片存放位置
+
+请将所有的物品图片放入以下文件夹中：
+`client/public/images/items/`
+(如果该文件夹不存在，请手动创建)
+
+## 2. 图片命名规范
+
+建议使用小写字母、数字和连字符命名，方便在代码中引用。例如：
+- m4a1.png
+- level4-armor.png
+- medkit.png
+
+建议统一图片尺寸（例如 128x128 像素的透明背景 PNG），以获得最佳显示效果。
+
+## 3. 如何在代码中关联图片
+
+打开 `client/src/pages/home.tsx` 文件，找到 `MOCK_ITEMS` 数组。
+在这个数组中，为您需要显示图片的物品添加一个 `image` 字段，填入图片的文件名（注意：不需要写完整的路径，只需要写相对于 public 文件夹的路径即可）。
+
+示例代码：
+
+```typescript
+const MOCK_ITEMS = [
+  { 
+    id: "w1", 
+    category: "weapon", 
+    rarity: "epic", 
+    name: { zh: "M4A1 突击步枪", en: "M4A1 Assault Rifle" },
+    image: "/images/items/m4a1.png" // <--- 在这里添加您的图片路径
+  },
+  { 
+    id: "a1", 
+    category: "armor", 
+    rarity: "epic", 
+    name: { zh: "四级战术背心", en: "Lvl 4 Tactical Vest" },
+    image: "/images/items/level4-armor.png" // <--- 另一张图片
+  },
+  // ... 其他物品
+]
+```
+
+## 4. 界面如何渲染这些图片
+
+我已经修改了代码，系统会自动检测物品是否包含 `image` 属性：
+- 如果有 `image`：系统会加载并显示您放入的真实图片。
+- 如果没有 `image`：系统会继续显示当前的默认占位图标。
+
+## 5. 静态部署说明
+
+当您运行构建命令并部署为静态网站时，`client/public` 目录下的所有文件会被原封不动地复制到最终的网站根目录中。因此，上述使用 `/images/items/...` 的绝对路径引用方式在静态网站环境中是完全有效且推荐的。

@@ -92,7 +92,7 @@ const CATEGORIES = [
 
 const MOCK_ITEMS = [
   // Weapons
-  { id: "w1", category: "weapon", rarity: "epic", name: { zh: "M4A1 突击步枪", en: "M4A1 Assault Rifle" } },
+  { id: "w1", category: "weapon", rarity: "epic", name: { zh: "M4A1 突击步枪", en: "M4A1 Assault Rifle" }, image: "/images/items/m4a1.png" },
   { id: "w2", category: "weapon", rarity: "rare", name: { zh: "AK-47 突击步枪", en: "AK-47 Assault Rifle" } },
   { id: "w3", category: "weapon", rarity: "rare", name: { zh: "MP5 冲锋枪", en: "MP5 SMG" } },
   { id: "w4", category: "weapon", rarity: "legendary", name: { zh: "AWM 狙击步枪", en: "AWM Sniper Rifle" } },
@@ -133,7 +133,7 @@ const MOCK_ITEMS = [
   { id: "m4", category: "misc", rarity: "legendary", name: { zh: "金条", en: "Gold Bar" } },
 ];
 
-type ItemType = typeof MOCK_ITEMS[0];
+type ItemType = typeof MOCK_ITEMS[0] & { image?: string };
 type SelectedItem = ItemType & { uid: string };
 
 export default function Home() {
@@ -256,13 +256,20 @@ export default function Home() {
                       {/* Rarity top border */}
                       <div className="h-1 w-full absolute top-0 left-0 z-10" style={{ backgroundColor: rarityConfig.color }} />
                       
-                      {/* Image Preview (Mocked with Icon) */}
+                      {/* Image Preview (Mocked with Icon or Real Image) */}
                       <div className="aspect-square bg-slate-950 flex items-center justify-center relative overflow-hidden group-hover:bg-slate-900 transition-colors">
                          <div className="absolute inset-0 opacity-10" style={{ backgroundColor: rarityConfig.color }} />
-                         {CATEGORIES.find(c => c.id === item.category)?.icon && (() => {
-                            const Icon = CATEGORIES.find(c => c.id === item.category)!.icon;
-                            return <Icon className="w-10 h-10 text-white/50 group-hover:text-white/80 transition-colors z-10" />;
-                         })()}
+                         
+                         {item.image ? (
+                           <img src={item.image} alt={item.name[lang]} className="w-16 h-16 object-contain z-10 drop-shadow-md" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
+                         ) : null}
+                         
+                         <div className={cn("z-10", item.image ? "hidden" : "block")}>
+                           {CATEGORIES.find(c => c.id === item.category)?.icon && (() => {
+                              const Icon = CATEGORIES.find(c => c.id === item.category)!.icon;
+                              return <Icon className="w-10 h-10 text-white/50 group-hover:text-white/80 transition-colors" />;
+                           })()}
+                         </div>
                          
                          {/* Hover overlay hint */}
                          <div className="absolute inset-0 bg-emerald-500/10 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity backdrop-blur-[1px] z-20">
@@ -404,8 +411,11 @@ export default function Home() {
                           >
                             <div className="absolute left-0 top-0 bottom-0 w-1" style={{ backgroundColor: rarityConfig.color }} />
                             
-                            <div className="w-8 h-8 bg-slate-950 flex items-center justify-center rounded border border-slate-800 ml-1">
-                              <ImageIcon className="w-4 h-4 text-slate-500" />
+                            <div className="w-8 h-8 bg-slate-950 flex items-center justify-center rounded border border-slate-800 ml-1 overflow-hidden">
+                              {item.image ? (
+                                <img src={item.image} alt="" className="w-6 h-6 object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
+                              ) : null}
+                              <ImageIcon className={cn("w-4 h-4 text-slate-500", item.image ? "hidden" : "block")} />
                             </div>
                             
                             <div className="flex-1 min-w-0">
@@ -451,8 +461,11 @@ function LootCard({ item, layoutStyle, lang }: { item: SelectedItem, layoutStyle
         className="flex items-center gap-2 bg-black/80 backdrop-blur-md border-l-[3px] border-y border-r border-y-white/10 border-r-white/10 p-1.5 shadow-xl"
         style={{ borderLeftColor: rarityConfig.color, boxShadow: `-2px 0 10px -4px ${rarityConfig.color}` }}
       >
-        <div className="w-8 h-8 bg-white/5 flex items-center justify-center border border-white/10">
-          <ImageIcon className="w-4 h-4 text-white/40" />
+        <div className="w-8 h-8 bg-white/5 flex items-center justify-center border border-white/10 overflow-hidden">
+          {item.image ? (
+            <img src={item.image} alt="" className="w-6 h-6 object-contain drop-shadow-md" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
+          ) : null}
+          <ImageIcon className={cn("w-4 h-4 text-white/40", item.image ? "hidden" : "block")} />
         </div>
         <div className="flex-1 min-w-0 pr-2">
           <h3 className="font-display font-bold text-white text-sm leading-tight truncate">{item.name[lang]}</h3>
@@ -496,10 +509,13 @@ function LootCard({ item, layoutStyle, lang }: { item: SelectedItem, layoutStyle
       />
 
       <div className="relative p-2 pl-4 flex items-center gap-3">
-        {/* Item Icon placeholder */}
-        <div className="w-10 h-10 bg-gradient-to-br from-white/10 to-transparent border border-white/20 flex items-center justify-center shadow-inner relative">
+        {/* Item Icon placeholder or Image */}
+        <div className="w-10 h-10 bg-gradient-to-br from-white/10 to-transparent border border-white/20 flex items-center justify-center shadow-inner relative overflow-hidden">
           <div className="absolute inset-0 opacity-20" style={{ backgroundColor: rarityConfig.color }} />
-          <ImageIcon className="w-5 h-5 text-white/80 z-10" />
+          {item.image ? (
+            <img src={item.image} alt="" className="w-8 h-8 object-contain z-10 drop-shadow-md" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
+          ) : null}
+          <ImageIcon className={cn("w-5 h-5 text-white/80 z-10", item.image ? "hidden" : "block")} />
         </div>
 
         {/* Info */}
