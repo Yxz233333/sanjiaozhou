@@ -16,7 +16,10 @@ import {
   Package,
   Globe,
   GripVertical,
-  Clock
+  Clock,
+  MoreVertical,
+  Maximize2,
+  Plus
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import MOCK_ITEMS_DATA from "../data.json";
@@ -26,6 +29,22 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { 
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+  ContextMenuLabel,
+  ContextMenuSeparator
+} from "@/components/ui/context-menu";
+import { 
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogClose
+} from "@/components/ui/dialog";
 import { 
   DndContext, 
   closestCenter,
@@ -144,19 +163,27 @@ const CATEGORIES = [
 const MOCK_ITEMS: { id: string, category: string, subcategory?: string, rarity: string, name: {zh: string, en: string}, image?: string }[] = MOCK_ITEMS_DATA;
 
 type ItemType = typeof MOCK_ITEMS[0];
-type SelectedItem = ItemType & { uid: string, fixedTime?: number };
+type SelectedItem = ItemType & { 
+  uid: string, 
+  fixedTime?: number,
+  customScale?: number,
+  isTextOnly?: boolean,
+  textContent?: string
+};
 
 // --- SORTABLE ITEM COMPONENT ---
 function SortableItem({ 
   item, 
   lang, 
   onRemove, 
-  onTimeChange 
+  onTimeChange,
+  onScaleChange
 }: { 
   item: SelectedItem, 
   lang: "zh" | "en", 
   onRemove: (uid: string) => void,
-  onTimeChange: (uid: string, field: 'min' | 'sec' | 'ms', time: string) => void
+  onTimeChange: (uid: string, field: 'min' | 'sec' | 'ms', time: string) => void,
+  onScaleChange: (uid: string, scale: number) => void
 }) {
   const {
     attributes,
@@ -174,7 +201,8 @@ function SortableItem({
     opacity: isDragging ? 0.5 : 1,
   };
 
-  const rarityConfig = RARITIES[item.rarity as keyof typeof RARITIES];
+  // We use standard color for text-only, or the rarity color if it exists
+  const rarityConfig = item.isTextOnly ? RARITIES.mythic : RARITIES[item.rarity as keyof typeof RARITIES];
 
   const currentTime = item.fixedTime || 0;
   const currentMin = item.fixedTime !== undefined ? Math.floor(currentTime / 60000) : "";
@@ -182,82 +210,106 @@ function SortableItem({
   const currentMs = item.fixedTime !== undefined ? currentTime % 1000 : "";
 
   return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className={cn(
-        "bg-slate-900 border rounded p-2 flex items-center gap-3 group relative overflow-hidden",
-        isDragging ? "border-emerald-500 shadow-lg shadow-emerald-500/20" : "border-slate-800"
-      )}
-    >
-      <div className="absolute left-0 top-0 bottom-0 w-1" style={{ backgroundColor: rarityConfig.color }} />
-      
-      {/* Drag Handle */}
-      <div 
-        {...attributes} 
-        {...listeners}
-        className="cursor-grab active:cursor-grabbing p-1 text-slate-600 hover:text-slate-300 ml-1"
-      >
-        <GripVertical className="w-4 h-4" />
-      </div>
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <div
+          ref={setNodeRef}
+          style={style}
+          className={cn(
+            "bg-slate-900 border rounded p-2 flex items-center gap-3 group relative overflow-hidden",
+            isDragging ? "border-emerald-500 shadow-lg shadow-emerald-500/20" : "border-slate-800"
+          )}
+        >
+          <div className="absolute left-0 top-0 bottom-0 w-1" style={{ backgroundColor: rarityConfig.color }} />
+          
+          {/* Drag Handle */}
+          <div 
+            {...attributes} 
+            {...listeners}
+            className="cursor-grab active:cursor-grabbing p-1 text-slate-600 hover:text-slate-300 ml-1"
+          >
+            <GripVertical className="w-4 h-4" />
+          </div>
 
-      <div className="w-8 h-8 bg-slate-950 flex items-center justify-center rounded border border-slate-800 overflow-hidden shrink-0">
-        {item.image ? (
-          <img src={item.image} alt="" className="w-6 h-6 object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
-        ) : null}
-        <ImageIcon className={cn("w-4 h-4 text-slate-500", item.image ? "hidden" : "block")} />
-      </div>
-      
-      <div className="flex-1 min-w-0">
-        <h4 className="text-sm font-medium text-slate-200 truncate">{item.name[lang]}</h4>
-        <p className="text-[10px] text-slate-500 font-display uppercase tracking-wider">
-          {rarityConfig[lang]}
-        </p>
-      </div>
+          <div className="w-8 h-8 bg-slate-950 flex items-center justify-center rounded border border-slate-800 overflow-hidden shrink-0">
+            {item.isTextOnly ? (
+              <FileText className="w-4 h-4 text-slate-400" />
+            ) : item.image ? (
+              <img src={item.image} alt="" className="w-6 h-6 object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
+            ) : null}
+            {!item.isTextOnly && <ImageIcon className={cn("w-4 h-4 text-slate-500", item.image ? "hidden" : "block")} />}
+          </div>
+          
+          <div className="flex-1 min-w-0">
+            <h4 className="text-sm font-medium text-slate-200 truncate">
+              {item.isTextOnly ? item.textContent : item.name[lang]}
+            </h4>
+            <p className="text-[10px] text-slate-500 font-display uppercase tracking-wider flex items-center gap-2">
+              {item.isTextOnly ? "TEXT ALERT" : rarityConfig[lang]}
+              {item.customScale && item.customScale !== 1 && (
+                 <span className="text-emerald-500 bg-emerald-500/10 px-1 rounded">x{item.customScale}</span>
+              )}
+            </p>
+          </div>
 
-      <div className="flex items-center gap-2 shrink-0">
-        <div className="flex items-center gap-1 bg-slate-950 px-2 py-1 rounded border border-slate-800 group-hover:border-slate-700 transition-colors">
-          <Clock className="w-3 h-3 text-slate-500" />
-          <div className="flex items-center gap-0.5 text-xs text-slate-400">
-            <input 
-              type="number"
-              placeholder="00"
-              value={currentMin}
-              onChange={(e) => onTimeChange(item.uid, 'min', e.target.value)}
-              className="w-6 bg-transparent text-slate-300 outline-none placeholder:text-slate-700 text-right hide-arrows"
-              min="0"
-            />
-            <span>:</span>
-            <input 
-              type="number"
-              placeholder="00"
-              value={currentSec}
-              onChange={(e) => onTimeChange(item.uid, 'sec', e.target.value)}
-              className="w-6 bg-transparent text-slate-300 outline-none placeholder:text-slate-700 text-center hide-arrows"
-              min="0"
-              max="59"
-            />
-            <span>.</span>
-            <input 
-              type="number"
-              placeholder="000"
-              value={currentMs}
-              onChange={(e) => onTimeChange(item.uid, 'ms', e.target.value)}
-              className="w-8 bg-transparent text-slate-300 outline-none placeholder:text-slate-700 text-left hide-arrows"
-              min="0"
-              max="999"
-            />
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-1 bg-slate-950 px-2 py-1 rounded border border-slate-800 group-hover:border-slate-700 transition-colors">
+              <Clock className="w-3 h-3 text-slate-500" />
+              <div className="flex items-center gap-0.5 text-xs text-slate-400">
+                <input 
+                  type="number"
+                  placeholder="00"
+                  value={currentMin}
+                  onChange={(e) => onTimeChange(item.uid, 'min', e.target.value)}
+                  className="w-6 bg-transparent text-slate-300 outline-none placeholder:text-slate-700 text-right hide-arrows"
+                  min="0"
+                />
+                <span>:</span>
+                <input 
+                  type="number"
+                  placeholder="00"
+                  value={currentSec}
+                  onChange={(e) => onTimeChange(item.uid, 'sec', e.target.value)}
+                  className="w-6 bg-transparent text-slate-300 outline-none placeholder:text-slate-700 text-center hide-arrows"
+                  min="0"
+                  max="59"
+                />
+                <span>.</span>
+                <input 
+                  type="number"
+                  placeholder="000"
+                  value={currentMs}
+                  onChange={(e) => onTimeChange(item.uid, 'ms', e.target.value)}
+                  className="w-8 bg-transparent text-slate-300 outline-none placeholder:text-slate-700 text-left hide-arrows"
+                  min="0"
+                  max="999"
+                />
+              </div>
+            </div>
+            
+            <button 
+              onClick={() => onRemove(item.uid)} 
+              className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-slate-800 rounded transition-colors"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
           </div>
         </div>
-        
-        <button 
-          onClick={() => onRemove(item.uid)} 
-          className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-slate-800 rounded transition-colors"
-        >
-          <Trash2 className="w-4 h-4" />
-        </button>
-      </div>
-    </div>
+      </ContextMenuTrigger>
+      <ContextMenuContent className="w-48 bg-slate-900 border-slate-800 text-slate-200">
+        <ContextMenuLabel className="text-xs text-slate-500">单独放大倍率</ContextMenuLabel>
+        <ContextMenuSeparator className="bg-slate-800" />
+        {[1, 1.5, 2, 2.5, 3].map((scale) => (
+          <ContextMenuItem 
+            key={scale}
+            onClick={() => onScaleChange(item.uid, scale)}
+            className="focus:bg-emerald-500/20 focus:text-emerald-400 cursor-pointer text-sm"
+          >
+            {scale}x {item.customScale === scale && " (当前)"}
+          </ContextMenuItem>
+        ))}
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }
 
@@ -341,6 +393,29 @@ export default function Home() {
       // But keeping it as 0 is also fine if they explicitly set it. We'll set to undefined if it's 0 to keep it clean.
       return { ...item, fixedTime: newTime === 0 && value === "" ? undefined : newTime };
     }));
+  };
+
+  const handleScaleChange = (uid: string, scale: number) => {
+    setSelectedList(prev => prev.map(item => 
+      item.uid === uid ? { ...item, customScale: scale } : item
+    ));
+  };
+
+  const handleAddTextAlert = () => {
+    const text = prompt("请输入文字内容 (例如: 关注主播不迷路)");
+    if (!text) return;
+    
+    const newTextItem: SelectedItem = {
+      id: `text_${Date.now()}`,
+      uid: Math.random().toString(36).substr(2, 9),
+      category: "text",
+      rarity: "mythic", // Use mythic red for text
+      name: { zh: text, en: text },
+      isTextOnly: true,
+      textContent: text
+    };
+    
+    setSelectedList(prev => [...prev, newTextItem]);
   };
 
   const handlePlay = () => {
@@ -705,16 +780,27 @@ export default function Home() {
                   <Settings className="w-4 h-4 text-slate-500" /> 
                   {t.selectedItems} ({selectedList.length})
                 </h2>
-                {selectedList.length > 0 && (
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    onClick={() => setSelectedList([])}
-                    className="h-7 text-xs text-slate-400 hover:text-red-400"
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={handleAddTextAlert}
+                    className="h-7 w-7 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-400/10 rounded-full"
+                    title="添加文字弹窗"
                   >
-                    {t.clearAll}
+                    <Plus className="w-4 h-4" />
                   </Button>
-                )}
+                  {selectedList.length > 0 && (
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={() => setSelectedList([])}
+                      className="h-7 text-xs text-slate-400 hover:text-red-400"
+                    >
+                      {t.clearAll}
+                    </Button>
+                  )}
+                </div>
               </div>
               
               <ScrollArea className="flex-1 p-3">
@@ -741,6 +827,7 @@ export default function Home() {
                               lang={lang}
                               onRemove={handleRemoveItem}
                               onTimeChange={handleTimeChange}
+                              onScaleChange={handleScaleChange}
                             />
                           ))}
                         </div>
@@ -776,14 +863,14 @@ function StackedLootCard({
   },
   onComplete: (uid: string) => void
 }) {
-  const rarityConfig = RARITIES[item.rarity as keyof typeof RARITIES];
+  const rarityConfig = item.isTextOnly ? RARITIES.mythic : RARITIES[item.rarity as keyof typeof RARITIES];
   
   // Create a placeholder based on category
   const placeholderType = item.category === "cards" ? "card_placeholder.png" : `placeholder_${item.category}.png`;
   const placeholderImage = `/images/items/${placeholderType}`;
 
   const controls = useAnimation();
-
+  
   const T_total_lifespan = config.lifetime / 1000;
   
   // 动画时间分配
@@ -794,6 +881,9 @@ function StackedLootCard({
   // 剩余存活时间
   const T_wait_before_exit = Math.max(0.1, T_total_lifespan - T_start_to_center - T_pause_before - T_expand - T_pause_after - 0.5); 
   const T_exit_top = 0.5; // 向上滑出的时间
+
+  const baseScale = config.cardScale * (item.customScale || 1);
+  const expandedScale = baseScale * config.expandScale;
 
   useEffect(() => {
     let isMounted = true;
@@ -814,15 +904,15 @@ function StackedLootCard({
       
       // 3. 放大 (此时让它向左突出一点以显示重点)
       await controls.start({
-        scale: config.cardScale * config.expandScale,
-        x: -20, // 放大时稍微往左靠
+        scale: expandedScale,
+        x: -20 * (item.customScale || 1), // 放大时稍微往左靠
         transition: { duration: T_expand / 2, ease: "easeOut" }
       });
       if (!isMounted) return;
       
       // 4. 缩小回原位
       await controls.start({
-        scale: config.cardScale,
+        scale: baseScale,
         x: 0,
         transition: { duration: T_expand / 2, ease: "easeIn" }
       });
@@ -840,7 +930,7 @@ function StackedLootCard({
       await controls.start({
         y: -100, // 向上偏移
         opacity: 0,
-        scale: 0.8,
+        scale: baseScale * 0.8,
         transition: { duration: T_exit_top, ease: "easeIn" }
       });
       
@@ -857,12 +947,12 @@ function StackedLootCard({
   return (
     <motion.div
       layout // 允许列表由于增删元素而自动进行平滑的上下位移排版
-      initial={{ x: 100, scale: config.cardScale, opacity: 0 }}
+      initial={{ x: 100, scale: baseScale, opacity: 0 }}
       animate={controls}
       // 当它被父组件强制移除（如超过上限被顶掉）时执行退场动画：向上方消失
-      exit={{ opacity: 0, y: -50, scale: 0.8, transition: { duration: 0.3 } }}
+      exit={{ opacity: 0, y: -50, scale: baseScale * 0.8, transition: { duration: 0.3 } }}
       className="relative origin-right w-full"
-      style={{ scale: config.cardScale }}
+      style={{ scale: baseScale }}
     >
       <div className="relative overflow-hidden group shadow-2xl bg-slate-900/90 backdrop-blur-sm border border-white/10" style={{ width: '100%' }}>
         {/* Angled cut background typical in tactical UI */}
@@ -880,67 +970,75 @@ function StackedLootCard({
         />
 
         <div className="relative p-2 pl-4 flex items-center gap-4">
-          {/* Item Icon placeholder or Image */}
-          <div className="w-14 h-14 bg-gradient-to-br from-white/10 to-transparent border border-white/20 flex items-center justify-center shadow-inner relative overflow-hidden shrink-0">
-            <div className="absolute inset-0 opacity-20" style={{ backgroundColor: rarityConfig.color }} />
-            
-            <motion.div 
-              animate={{ 
-                opacity: [1, 1, 0, 0], // Hide at exact middle of expand phase
-                scale: [1, 1, 0.5, 0.5]
-              }}
-              transition={{ 
-                times: [0, (T_start_to_center + T_pause_before) / T_total_lifespan, (T_start_to_center + T_pause_before + T_expand/2) / T_total_lifespan, 1], 
-                duration: T_total_lifespan
-              }}
-              className="absolute inset-0 flex items-center justify-center bg-slate-950 z-20"
-            >
-              <img src={placeholderImage} alt="unsearched" className="w-10 h-10 object-contain opacity-50" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-              <span className="text-[8px] text-white/40 absolute bottom-0.5 font-display tracking-widest font-bold">SEARCH</span>
-            </motion.div>
-
-            <motion.div
-              initial={{ opacity: 0, scale: 0.5 }}
-              animate={{ 
-                opacity: [0, 0, 1, 1], 
-                scale: [0.5, 0.5, 1, 1]
-              }}
-              transition={{ 
-                times: [0, (T_start_to_center + T_pause_before) / T_total_lifespan, (T_start_to_center + T_pause_before + T_expand/2) / T_total_lifespan, 1], 
-                duration: T_total_lifespan
-              }}
-              className="absolute inset-0 flex items-center justify-center z-10"
-            >
-              {item.image ? (
-                <img src={item.image} alt="" className="w-12 h-12 object-contain drop-shadow-lg" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
-              ) : null}
-              <ImageIcon className={cn("w-6 h-6 text-white/80", item.image ? "hidden" : "block")} />
-            </motion.div>
-          </div>
-
-          {/* Info */}
-          <div className="flex-1 flex flex-col justify-center pr-4 overflow-hidden relative h-[56px]">
-             {/* Info overlay (Searching state) */}
-             <motion.div
+          {item.isTextOnly ? (
+            <div className="w-14 h-14 bg-gradient-to-br from-white/10 to-transparent border border-white/20 flex items-center justify-center shadow-inner relative overflow-hidden shrink-0">
+              <div className="absolute inset-0 opacity-20" style={{ backgroundColor: rarityConfig.color }} />
+              <FileText className="w-6 h-6 text-white/80 z-10" />
+            </div>
+          ) : (
+            <div className="w-14 h-14 bg-gradient-to-br from-white/10 to-transparent border border-white/20 flex items-center justify-center shadow-inner relative overflow-hidden shrink-0">
+              <div className="absolute inset-0 opacity-20" style={{ backgroundColor: rarityConfig.color }} />
+              
+              <motion.div 
                 animate={{ 
-                  opacity: [1, 1, 0, 0], 
+                  opacity: [1, 1, 0, 0], // Hide at exact middle of expand phase
+                  scale: [1, 1, 0.5, 0.5]
                 }}
                 transition={{ 
                   times: [0, (T_start_to_center + T_pause_before) / T_total_lifespan, (T_start_to_center + T_pause_before + T_expand/2) / T_total_lifespan, 1], 
                   duration: T_total_lifespan
                 }}
-                className="absolute inset-0 flex flex-col justify-center bg-transparent z-20"
-             >
-                <div className="w-20 h-2 bg-white/10 rounded mb-2 animate-pulse" />
-                <div className="w-28 h-3 bg-white/10 rounded animate-pulse" />
-             </motion.div>
+                className="absolute inset-0 flex items-center justify-center bg-slate-950 z-20"
+              >
+                <img src={placeholderImage} alt="unsearched" className="w-10 h-10 object-contain opacity-50" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                <span className="text-[8px] text-white/40 absolute bottom-0.5 font-display tracking-widest font-bold">SEARCH</span>
+              </motion.div>
+
+              <motion.div
+                initial={{ opacity: 0, scale: 0.5 }}
+                animate={{ 
+                  opacity: [0, 0, 1, 1], 
+                  scale: [0.5, 0.5, 1, 1]
+                }}
+                transition={{ 
+                  times: [0, (T_start_to_center + T_pause_before) / T_total_lifespan, (T_start_to_center + T_pause_before + T_expand/2) / T_total_lifespan, 1], 
+                  duration: T_total_lifespan
+                }}
+                className="absolute inset-0 flex items-center justify-center z-10"
+              >
+                {item.image ? (
+                  <img src={item.image} alt="" className="w-12 h-12 object-contain drop-shadow-lg" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
+                ) : null}
+                <ImageIcon className={cn("w-6 h-6 text-white/80", item.image ? "hidden" : "block")} />
+              </motion.div>
+            </div>
+          )}
+
+          {/* Info */}
+          <div className="flex-1 flex flex-col justify-center pr-4 overflow-hidden relative h-[56px]">
+             {/* Info overlay (Searching state) - skip for text only */}
+             {!item.isTextOnly && (
+               <motion.div
+                  animate={{ 
+                    opacity: [1, 1, 0, 0], 
+                  }}
+                  transition={{ 
+                    times: [0, (T_start_to_center + T_pause_before) / T_total_lifespan, (T_start_to_center + T_pause_before + T_expand/2) / T_total_lifespan, 1], 
+                    duration: T_total_lifespan
+                  }}
+                  className="absolute inset-0 flex flex-col justify-center bg-transparent z-20"
+               >
+                  <div className="w-20 h-2 bg-white/10 rounded mb-2 animate-pulse" />
+                  <div className="w-28 h-3 bg-white/10 rounded animate-pulse" />
+               </motion.div>
+             )}
 
              {/* Real Info */}
              <motion.div 
                initial={{ opacity: 0, x: -10 }}
                animate={{ 
-                 opacity: [0, 0, 1, 1], 
-                 x: [-10, -10, 0, 0]
+                 opacity: item.isTextOnly ? 1 : [0, 0, 1, 1], 
+                 x: item.isTextOnly ? 0 : [-10, -10, 0, 0]
                }}
                transition={{ 
                  times: [0, (T_start_to_center + T_pause_before) / T_total_lifespan, (T_start_to_center + T_pause_before + T_expand/2) / T_total_lifespan, 1], 
@@ -948,11 +1046,13 @@ function StackedLootCard({
                }}
                className="flex flex-col justify-center absolute inset-0 z-10"
              >
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-[10px] uppercase font-bold tracking-widest drop-shadow-md" style={{ color: rarityConfig.color }}>{rarityConfig[lang]}</span>
-                </div>
+                {!item.isTextOnly && (
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-[10px] uppercase font-bold tracking-widest drop-shadow-md" style={{ color: rarityConfig.color }}>{rarityConfig[lang]}</span>
+                  </div>
+                )}
                 <h3 className="font-display font-bold text-base text-white leading-none tracking-wide drop-shadow-md truncate">
-                  {item.name[lang]}
+                  {item.isTextOnly ? item.textContent : item.name[lang]}
                 </h3>
              </motion.div>
           </div>
