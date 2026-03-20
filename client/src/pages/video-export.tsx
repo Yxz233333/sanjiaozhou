@@ -54,11 +54,14 @@ function getPrismaticTextColor(progress: number) {
 interface MarkedEvent {
   id: string;
   timestamp: number;
-  // Either item-based or text-based
   item?: typeof MOCK_ITEMS[0];
   isText?: true;
   textContent?: string;
   textRarity?: string;
+  // Per-item overrides
+  customScale?: number;    // multiplier on top of global overlayScale
+  customDuration?: number; // seconds, overrides cardLifetime
+  customFontSize?: number; // text size multiplier (text events only)
 }
 
 interface ActiveCard {
@@ -308,12 +311,18 @@ export default function VideoExport() {
     const rarityDef = RARITIES[rarityKey] || RARITIES.mythic;
     const isPrismatic = rarityDef.prismatic;
 
-    const W = CARD_W * scale; const H = CARD_H * scale;
-    const x = canvasW - W - CARD_X_OFFSET * scale;
-    const y = CARD_Y_START * scale + slotIndex * (H + CARD_GAP * scale);
+
+    // Apply per-item scale override on top of global scale
+    const itemScale = scale * (event.customScale ?? 1);
+    const W = CARD_W * itemScale; const H = CARD_H * itemScale;
+    const x = canvasW - W - CARD_X_OFFSET * itemScale;
+    // Use global scale for slot spacing so other cards don't shift
+    const slotH = CARD_H * scale;
+    const y = CARD_Y_START * scale + slotIndex * (slotH + CARD_GAP * scale);
 
     // Compute animation phase fractions dynamically from slider values
-    const lifeMs = cardLifetime[0] * 1000;
+    // customDuration (seconds) overrides global cardLifetime
+    const lifeMs = (event.customDuration !== undefined ? event.customDuration * 1000 : cardLifetime[0] * 1000);
     const enterMs   = Math.min(400, lifeMs * 0.1);
     const pauseMs   = Math.min(pauseBeforeExpand[0], lifeMs * 0.15);
     const expMs     = Math.min(expandDuration[0],    lifeMs * 0.12);
@@ -347,8 +356,10 @@ export default function VideoExport() {
     }
 
     ctx.save(); ctx.globalAlpha = Math.max(0, opacity);
-    const CW = CARD_W * cardScale; const CH = CARD_H * cardScale;
-    const barW = 5 * cardScale;
+    // Width expands with cardScale; height is FIXED to avoid overlapping adjacent slots
+    const CW = CARD_W * cardScale;
+    const CH = H; // fixed height — only width/x changes during expand
+    const barW = 5 * itemScale;
 
     // Card background
     ctx.fillStyle = 'rgba(10,12,18,0.93)';
@@ -366,37 +377,39 @@ export default function VideoExport() {
     ctx.shadowBlur = 0;
 
     const textColor = isPrismatic ? getPrismaticTextColor(animProgress) : rarityDef.color;
+    // Per-item font size multiplier (text events only)
+    const fontMult = (event.isText ? (event.customFontSize ?? 1) : 1) * itemScale;
 
     if (event.isText) {
       // ── TEXT ONLY CARD ──
       ctx.fillStyle = textColor;
-      ctx.font = `bold ${11 * cardScale}px Arial, sans-serif`;
-      ctx.fillText(rarityDef[lang].toUpperCase(), cardX + barW + 12 * cardScale, cardY + CH * 0.38);
+      ctx.font = `bold ${11 * fontMult}px Arial, sans-serif`;
+      ctx.fillText(rarityDef[lang].toUpperCase(), cardX + barW + 12 * itemScale, cardY + CH * 0.38);
       ctx.fillStyle = isPrismatic ? getPrismaticTextColor(animProgress + 0.1) : 'rgba(255,255,255,0.95)';
-      ctx.font = `bold ${15 * cardScale}px Arial, sans-serif`;
+      ctx.font = `bold ${15 * fontMult}px Arial, sans-serif`;
       const txt = event.textContent || '';
-      const maxW2 = CW - barW - 16 * cardScale;
+      const maxW2 = CW - barW - 16 * itemScale;
       let disp = txt;
       while (ctx.measureText(disp).width > maxW2 && disp.length > 1) disp = disp.slice(0, -1);
       if (disp !== txt) disp += '…';
-      ctx.fillText(disp, cardX + barW + 12 * cardScale, cardY + CH * 0.7);
+      ctx.fillText(disp, cardX + barW + 12 * itemScale, cardY + CH * 0.7);
     } else {
       // ── ITEM CARD ──
       const item = event.item!;
       const iconSize = CH * 0.7;
-      const iconX = cardX + barW + 8 * cardScale;
+      const iconX = cardX + barW + 8 * itemScale;
       const iconY = cardY + (CH - iconSize) / 2;
       ctx.fillStyle = 'rgba(255,255,255,0.05)'; ctx.fillRect(iconX, iconY, iconSize, iconSize);
       const img = item.image ? loadedImagesRef.current[item.id] : null;
       if (img) { try { ctx.drawImage(img, iconX + 2, iconY + 2, iconSize - 4, iconSize - 4); } catch {} }
-      const textX = iconX + iconSize + 8 * cardScale;
+      const textX = iconX + iconSize + 8 * itemScale;
       ctx.fillStyle = textColor;
-      ctx.font = `bold ${10 * cardScale}px Arial, sans-serif`;
+      ctx.font = `bold ${10 * itemScale}px Arial, sans-serif`;
       ctx.fillText(rarityDef[lang].toUpperCase(), textX, cardY + CH * 0.38);
       ctx.fillStyle = 'rgba(255,255,255,0.95)';
-      ctx.font = `bold ${13 * cardScale}px Arial, sans-serif`;
+      ctx.font = `bold ${13 * itemScale}px Arial, sans-serif`;
       const name = item.name[lang] || item.name.zh;
-      const maxW = CW - (textX - cardX) - 8 * cardScale;
+      const maxW = CW - (textX - cardX) - 8 * itemScale;
       let disp = name;
       while (ctx.measureText(disp).width > maxW && disp.length > 1) disp = disp.slice(0, -1);
       if (disp !== name) disp += '…';
@@ -501,16 +514,42 @@ export default function VideoExport() {
 
   const handleDeleteEvent = (id: string) => setMarkedEvents(prev => prev.filter(e => e.id !== id));
 
+  // ── PER-ITEM CONTEXT MENU ──
+  const [ctxMenu, setCtxMenu] = useState<{ eventId: string; x: number; y: number } | null>(null);
+  const ctxMenuRef = useRef<HTMLDivElement>(null);
+
+  const handleUpdateEventParam = (id: string, param: 'customScale' | 'customDuration' | 'customFontSize', value: number) => {
+    setMarkedEvents(prev => prev.map(e => e.id === id ? { ...e, [param]: value } : e));
+  };
+
+  // Close context menu on outside click
+  useEffect(() => {
+    if (!ctxMenu) return;
+    const handler = (e: MouseEvent) => {
+      if (ctxMenuRef.current && !ctxMenuRef.current.contains(e.target as Node)) {
+        setCtxMenu(null);
+      }
+    };
+    setTimeout(() => window.addEventListener('mousedown', handler), 10);
+    return () => window.removeEventListener('mousedown', handler);
+  }, [ctxMenu]);
+
   // ── SEEK ──
   const seekTo = (pct: number) => {
     const video = videoRef.current; if (!video) return;
     const t = pct * videoDuration;
+    const tMs = t * 1000;
     video.currentTime = t; setCurrentTime(t);
-    scheduledRef.current = new Set(markedEventsRef.current.filter(e => e.timestamp * 1000 < t * 1000).map(e => e.id));
-    if (!isPlaying) {
-      const canvas = canvasRef.current;
-      if (canvas) canvas.getContext('2d')!.drawImage(video, 0, 0);
-    }
+    // Only mark events strictly before seek point as "already shown"
+    scheduledRef.current = new Set(
+      markedEventsRef.current.filter(e => e.timestamp * 1000 < tMs).map(e => e.id)
+    );
+    // CRITICAL: clear all active cards so they don't duplicate when replaying
+    activeCardsRef.current = [];
+    setActiveCards([]);
+    // Redraw video frame when not playing
+    const canvas = canvasRef.current;
+    if (canvas) canvas.getContext('2d')!.drawImage(video, 0, 0);
   };
 
   const handleProgressMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -771,8 +810,18 @@ export default function VideoExport() {
                 {markedEvents.map(evt => {
                   const rk = evt.isText ? (evt.textRarity || 'mythic') : (evt.item?.rarity || 'mythic');
                   const def = RARITIES[rk] || RARITIES.mythic;
+                  const hasCustom = evt.customScale !== undefined || evt.customDuration !== undefined || evt.customFontSize !== undefined;
                   return (
-                    <div key={evt.id} className="flex items-center gap-2.5 p-2.5 bg-slate-900 border border-slate-800 rounded-lg group hover:border-slate-700 transition-colors">
+                    <div
+                      key={evt.id}
+                      className={cn("flex items-center gap-2.5 p-2.5 bg-slate-900 border rounded-lg group transition-colors cursor-context-menu select-none",
+                        hasCustom ? "border-violet-700/50 hover:border-violet-600/60" : "border-slate-800 hover:border-slate-700"
+                      )}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        setCtxMenu({ eventId: evt.id, x: e.clientX, y: e.clientY });
+                      }}
+                    >
                       {def.prismatic ? (
                         <div className="w-1 h-10 rounded-full shrink-0" style={{ background: PRISMATIC_GRADIENT }} />
                       ) : (
@@ -791,14 +840,26 @@ export default function VideoExport() {
                         <p className="text-xs font-medium text-slate-200 truncate">
                           {evt.isText ? (evt.textContent || '—') : (evt.item?.name[lang] || '—')}
                         </p>
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           <span className="text-[10px] text-slate-500 font-mono">{formatTime(evt.timestamp)}</span>
                           {evt.isText && <span className="text-[10px] text-slate-600 bg-slate-800 px-1 rounded">文字</span>}
+                          {evt.customScale !== undefined && <span className="text-[10px] text-violet-400 bg-violet-400/10 px-1 rounded">{evt.customScale.toFixed(1)}x</span>}
+                          {evt.customDuration !== undefined && <span className="text-[10px] text-amber-400 bg-amber-400/10 px-1 rounded">{evt.customDuration}s</span>}
+                          {evt.customFontSize !== undefined && <span className="text-[10px] text-sky-400 bg-sky-400/10 px-1 rounded">字{evt.customFontSize.toFixed(1)}x</span>}
                         </div>
                       </div>
-                      <button onClick={() => handleDeleteEvent(evt.id)} className="opacity-0 group-hover:opacity-100 p-1 text-slate-600 hover:text-red-400 transition-all shrink-0">
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      <div className="flex items-center opacity-0 group-hover:opacity-100 transition-all gap-0.5 shrink-0">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setCtxMenu({ eventId: evt.id, x: e.clientX, y: e.clientY }); }}
+                          className="p-1 text-slate-500 hover:text-violet-400 transition-colors"
+                          title="右键也可调整"
+                        >
+                          <RefreshCcw className="w-3 h-3" />
+                        </button>
+                        <button onClick={() => handleDeleteEvent(evt.id)} className="p-1 text-slate-600 hover:text-red-400 transition-colors">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
                   );
                 })}
@@ -862,6 +923,107 @@ export default function VideoExport() {
           </div>
         </div>
       </div>
+
+      {/* ── PER-ITEM CONTEXT MENU ── */}
+      <AnimatePresence>
+        {ctxMenu && (() => {
+          const cEvt = markedEvents.find(e => e.id === ctxMenu.eventId);
+          if (!cEvt) return null;
+          const isTextEvt = !!cEvt.isText;
+          // Clamp position so menu doesn't go off-screen
+          const menuW = 248, menuH = isTextEvt ? 220 : 160;
+          const clampedX = Math.min(ctxMenu.x, window.innerWidth - menuW - 8);
+          const clampedY = Math.min(ctxMenu.y, window.innerHeight - menuH - 8);
+          return (
+            <motion.div
+              ref={ctxMenuRef}
+              key="ctx-menu"
+              initial={{ opacity: 0, scale: 0.93, y: -4 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: -4 }}
+              transition={{ duration: 0.12 }}
+              className="fixed z-[100] bg-slate-800 border border-slate-600 rounded-xl shadow-2xl p-3 w-[248px]"
+              style={{ left: clampedX, top: clampedY }}
+            >
+              <div className="text-[11px] font-semibold text-slate-400 mb-2.5 px-0.5 flex items-center justify-between">
+                <span>{lang === 'zh' ? '单独调整' : 'Item Override'}</span>
+                <button
+                  className="text-slate-600 hover:text-slate-300 transition-colors"
+                  onClick={() => {
+                    setMarkedEvents(prev => prev.map(e =>
+                      e.id === ctxMenu.eventId
+                        ? { ...e, customScale: undefined, customDuration: undefined, customFontSize: undefined }
+                        : e
+                    ));
+                  }}
+                  title={lang === 'zh' ? '重置' : 'Reset'}
+                >
+                  <RefreshCcw className="w-3 h-3" />
+                </button>
+              </div>
+
+              {/* Scale override */}
+              <div className="mb-2.5">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[11px] text-slate-300">{lang === 'zh' ? '缩放' : 'Scale'}</span>
+                  <span className="text-[11px] text-violet-400 font-mono">{(cEvt.customScale ?? 1).toFixed(2)}x</span>
+                </div>
+                <input
+                  type="range" min="0.5" max="3" step="0.05"
+                  value={cEvt.customScale ?? 1}
+                  onChange={e => handleUpdateEventParam(ctxMenu.eventId, 'customScale', Number(e.target.value))}
+                  className="w-full h-1 accent-violet-500"
+                />
+              </div>
+
+              {/* Duration override */}
+              <div className="mb-2.5">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[11px] text-slate-300">{lang === 'zh' ? '显示时长' : 'Duration'}</span>
+                  <span className="text-[11px] text-amber-400 font-mono">{(cEvt.customDuration ?? cardLifetime[0] / 1000).toFixed(1)}s</span>
+                </div>
+                <input
+                  type="range" min="1" max="30" step="0.5"
+                  value={cEvt.customDuration ?? cardLifetime[0] / 1000}
+                  onChange={e => handleUpdateEventParam(ctxMenu.eventId, 'customDuration', Number(e.target.value))}
+                  className="w-full h-1 accent-amber-500"
+                />
+              </div>
+
+              {/* Font size override (text events only) */}
+              {isTextEvt && (
+                <div className="mb-2.5">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[11px] text-slate-300">{lang === 'zh' ? '字体大小' : 'Font Size'}</span>
+                    <span className="text-[11px] text-sky-400 font-mono">{(cEvt.customFontSize ?? 1).toFixed(2)}x</span>
+                  </div>
+                  <input
+                    type="range" min="0.5" max="3" step="0.05"
+                    value={cEvt.customFontSize ?? 1}
+                    onChange={e => handleUpdateEventParam(ctxMenu.eventId, 'customFontSize', Number(e.target.value))}
+                    className="w-full h-1 accent-sky-500"
+                  />
+                </div>
+              )}
+
+              <div className="flex gap-2 mt-3 pt-2.5 border-t border-slate-700">
+                <button
+                  className="flex-1 py-1 text-[11px] text-slate-400 bg-slate-700/60 hover:bg-slate-700 rounded-lg transition-colors"
+                  onClick={() => setCtxMenu(null)}
+                >
+                  {lang === 'zh' ? '关闭' : 'Close'}
+                </button>
+                <button
+                  className="flex-1 py-1 text-[11px] text-red-400 bg-red-400/10 hover:bg-red-400/20 rounded-lg transition-colors"
+                  onClick={() => { handleDeleteEvent(ctxMenu.eventId); setCtxMenu(null); }}
+                >
+                  {lang === 'zh' ? '删除' : 'Delete'}
+                </button>
+              </div>
+            </motion.div>
+          );
+        })()}
+      </AnimatePresence>
 
       {/* ── ITEM PICKER DIALOG ── */}
       <AnimatePresence>
