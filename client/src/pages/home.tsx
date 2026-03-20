@@ -750,7 +750,25 @@ export default function Home() {
               </div>
 
               {/* Animation Control Sliders */}
-              <div className="grid grid-cols-2 gap-x-4 gap-y-3 pt-2">
+              <div className="flex items-center justify-between pt-3 pb-1">
+                <Label className="text-[10px] text-slate-500 uppercase tracking-wider">动画参数</Label>
+                <button
+                  onClick={() => {
+                    setAnimDelay([2000]);
+                    setPauseBeforeExpand([500]);
+                    setExpandDuration([300]);
+                    setPauseAfterExpand([1000]);
+                    setCardScale([1]);
+                    setExpandScale([1.5]);
+                    setMaxStackedItems([3]);
+                    setItemLifespan([8000]);
+                  }}
+                  className="flex items-center gap-1 text-[10px] text-slate-500 hover:text-violet-400 transition-colors px-2 py-1 rounded hover:bg-violet-400/10"
+                >
+                  <RefreshCcw className="w-2.5 h-2.5" />恢复默认
+                </button>
+              </div>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-3">
                 <div className="space-y-1">
                   <div className="flex justify-between items-center">
                     <Label className="text-[10px] text-slate-400">出货间隔时间</Label>

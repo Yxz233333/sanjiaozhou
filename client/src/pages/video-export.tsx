@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft, Upload, Play, Square, Download,
   Trash2, CheckCircle2, Pause, Film, Globe,
-  Plus, Video, Clock, Save, RotateCcw, Type, Package
+  Plus, Video, Clock, Save, RotateCcw, Type, Package, RefreshCcw
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -121,8 +121,14 @@ export default function VideoExport() {
   const [exportDone, setExportDone] = useState(false);
   const [exportUrl, setExportUrl] = useState<string | null>(null);
 
+  // Animation params (mirrors home.tsx sliders)
   const [overlayScale, setOverlayScale] = useState([1]);
   const [cardLifetime, setCardLifetime] = useState([8]);
+  const [pauseBeforeExpand, setPauseBeforeExpand] = useState([500]);
+  const [expandDuration, setExpandDuration] = useState([300]);
+  const [pauseAfterExpand, setPauseAfterExpand] = useState([1000]);
+  const [expandScale, setExpandScale] = useState([1.5]);
+  const [maxStackItems, setMaxStackItems] = useState([3]);
 
   // Item picker state
   const [showPicker, setShowPicker] = useState(false);
@@ -306,7 +312,21 @@ export default function VideoExport() {
     const x = canvasW - W - CARD_X_OFFSET * scale;
     const y = CARD_Y_START * scale + slotIndex * (H + CARD_GAP * scale);
 
-    const T_enter = 0.08, T_pause1 = 0.18, T_expand = 0.28, T_shrink = 0.38, T_hold = 0.85;
+    // Compute animation phase fractions dynamically from slider values
+    const lifeMs = cardLifetime[0] * 1000;
+    const enterMs   = Math.min(400, lifeMs * 0.1);
+    const pauseMs   = Math.min(pauseBeforeExpand[0], lifeMs * 0.15);
+    const expMs     = Math.min(expandDuration[0],    lifeMs * 0.12);
+    const shrinkMs  = expMs;
+    const holdMs    = Math.min(pauseAfterExpand[0],  lifeMs * 0.15);
+    const exitMs    = Math.min(700, lifeMs * 0.15);
+    const T_enter  = enterMs / lifeMs;
+    const T_pause1 = T_enter + pauseMs / lifeMs;
+    const T_expand = T_pause1 + expMs / lifeMs;
+    const T_shrink = T_expand + shrinkMs / lifeMs;
+    const T_hold   = T_shrink + holdMs / lifeMs;
+    const exScale  = expandScale[0]; // user-controlled expand multiplier
+
     let cardX = x, cardScale = scale, opacity = 1, cardY = y;
 
     if (animProgress < T_enter) {
@@ -314,15 +334,15 @@ export default function VideoExport() {
     } else if (animProgress < T_pause1) {
       cardX = x;
     } else if (animProgress < T_expand) {
-      const p = (animProgress - T_pause1) / (T_expand - T_pause1);
-      cardScale = scale * (1 + p * 0.3); cardX = x - (cardScale - scale) * 0.3 * W;
+      const p = (animProgress - T_pause1) / Math.max(0.001, T_expand - T_pause1);
+      cardScale = scale * (1 + p * (exScale - 1)); cardX = x - (cardScale - scale) * 0.3 * W;
     } else if (animProgress < T_shrink) {
-      const p = (animProgress - T_expand) / (T_shrink - T_expand);
-      cardScale = scale * (1.3 - p * 0.3); cardX = x - (cardScale - scale) * 0.3 * W;
+      const p = (animProgress - T_expand) / Math.max(0.001, T_shrink - T_expand);
+      cardScale = scale * (exScale - p * (exScale - 1)); cardX = x - (cardScale - scale) * 0.3 * W;
     } else if (animProgress < T_hold) {
       cardX = x;
     } else {
-      const p = (animProgress - T_hold) / (1 - T_hold);
+      const p = (animProgress - T_hold) / Math.max(0.001, 1 - T_hold);
       opacity = 1 - p; cardY = y - p * H * 1.5;
     }
 
@@ -383,7 +403,7 @@ export default function VideoExport() {
       ctx.fillText(disp, textX, cardY + CH * 0.68);
     }
     ctx.restore();
-  }, [lang]);
+  }, [lang, cardLifetime, pauseBeforeExpand, expandDuration, pauseAfterExpand, expandScale]);
 
   const renderFrame = useCallback((video: HTMLVideoElement, canvas: HTMLCanvasElement, cards: ActiveCard[], tMs: number) => {
     const ctx = canvas.getContext('2d')!;
@@ -391,12 +411,12 @@ export default function VideoExport() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
     cards.filter(c => tMs >= c.startTime && tMs < c.startTime + c.duration)
-      .slice(-MAX_STACK)
+      .slice(-maxStackItems[0])
       .forEach((card, idx) => {
         const progress = Math.min(1, (tMs - card.startTime) / card.duration);
         drawCard(ctx, card.event, idx, progress, scale, canvas.width);
       });
-  }, [overlayScale, drawCard]);
+  }, [overlayScale, maxStackItems, drawCard]);
 
   // ── PLAYBACK ──
   const playbackLoop = useCallback((video: HTMLVideoElement, canvas: HTMLCanvasElement) => {
@@ -788,13 +808,39 @@ export default function VideoExport() {
 
           {/* Export */}
           <div className="border-t border-slate-800 p-4 space-y-3 shrink-0">
-            <div>
-              <Label className="text-xs text-slate-400 mb-1.5 block">{lang === 'zh' ? `弹窗大小 ${overlayScale[0].toFixed(1)}x` : `Scale ${overlayScale[0].toFixed(1)}x`}</Label>
-              <Slider value={overlayScale} onValueChange={setOverlayScale} min={0.5} max={2} step={0.1} />
+            {/* Sliders header with reset */}
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-slate-500 uppercase tracking-wider">动画参数</span>
+              <button
+                onClick={() => {
+                  setOverlayScale([1]); setCardLifetime([8]);
+                  setPauseBeforeExpand([500]); setExpandDuration([300]);
+                  setPauseAfterExpand([1000]); setExpandScale([1.5]);
+                  setMaxStackItems([3]);
+                }}
+                className="flex items-center gap-1 text-[10px] text-slate-500 hover:text-violet-400 transition-colors px-2 py-0.5 rounded hover:bg-violet-400/10"
+              >
+                <RotateCcw className="w-2.5 h-2.5" />恢复默认
+              </button>
             </div>
-            <div>
-              <Label className="text-xs text-slate-400 mb-1.5 block">{lang === 'zh' ? `停留时长 ${cardLifetime[0]}s` : `Duration ${cardLifetime[0]}s`}</Label>
-              <Slider value={cardLifetime} onValueChange={setCardLifetime} min={3} max={20} step={1} />
+            <div className="grid grid-cols-2 gap-x-3 gap-y-2.5">
+              {[
+                { label: lang==='zh'?'卡片大小':'Scale', val: overlayScale[0].toFixed(1)+'x', slider: <Slider value={overlayScale} onValueChange={setOverlayScale} min={0.5} max={2} step={0.1} /> },
+                { label: lang==='zh'?'消失时间':'Duration', val: cardLifetime[0]+'s', slider: <Slider value={cardLifetime} onValueChange={setCardLifetime} min={3} max={20} step={1} /> },
+                { label: lang==='zh'?'停留放大':'Pause→Expand', val: pauseBeforeExpand[0]+'ms', slider: <Slider value={pauseBeforeExpand} onValueChange={setPauseBeforeExpand} min={100} max={3000} step={100} /> },
+                { label: lang==='zh'?'放大时长':'Expand Time', val: expandDuration[0]+'ms', slider: <Slider value={expandDuration} onValueChange={setExpandDuration} min={100} max={2000} step={100} /> },
+                { label: lang==='zh'?'恢复停留':'Hold After', val: pauseAfterExpand[0]+'ms', slider: <Slider value={pauseAfterExpand} onValueChange={setPauseAfterExpand} min={100} max={3000} step={100} /> },
+                { label: lang==='zh'?'放大倍率':'Expand Scale', val: expandScale[0].toFixed(1)+'x', slider: <Slider value={expandScale} onValueChange={setExpandScale} min={1.1} max={3} step={0.1} /> },
+                { label: lang==='zh'?'同屏最多':'Max Stack', val: maxStackItems[0]+'个', slider: <Slider value={maxStackItems} onValueChange={setMaxStackItems} min={1} max={10} step={1} /> },
+              ].map(({ label, val, slider }) => (
+                <div key={label} className="space-y-1">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] text-slate-400">{label}</span>
+                    <span className="text-[10px] text-emerald-400 font-mono">{val}</span>
+                  </div>
+                  {slider}
+                </div>
+              ))}
             </div>
             {!exportDone ? (
               <Button
