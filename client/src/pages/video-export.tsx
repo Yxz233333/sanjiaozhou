@@ -129,7 +129,7 @@ export default function VideoExport() {
 
   // Animation params (mirrors home.tsx sliders)
   const [overlayScale, setOverlayScale] = useState([1]);
-  const [cardLifetime, setCardLifetime] = useState([8]);
+  const [cardLifetime, setCardLifetime] = useState([2000]); // in ms
   const [pauseBeforeExpand, setPauseBeforeExpand] = useState([500]);
   const [expandDuration, setExpandDuration] = useState([300]);
   const [pauseAfterExpand, setPauseAfterExpand] = useState([1000]);
@@ -374,8 +374,8 @@ export default function VideoExport() {
     const y = CARD_Y_START * scale + slotIndex * (slotH + CARD_GAP * scale);
 
     // Compute animation phase fractions dynamically from slider values
-    // customDuration (seconds) overrides global cardLifetime
-    const lifeMs = (event.customDuration !== undefined ? event.customDuration * 1000 : cardLifetime[0] * 1000);
+    // customDuration (seconds) overrides global cardLifetime (now in ms)
+    const lifeMs = (event.customDuration !== undefined ? event.customDuration * 1000 : cardLifetime[0]);
     const enterMs   = Math.min(400, lifeMs * 0.1);
     const pauseMs   = Math.min(pauseBeforeExpand[0], lifeMs * 0.15);
     const expMs     = Math.min(expandDuration[0],    lifeMs * 0.12);
@@ -389,6 +389,8 @@ export default function VideoExport() {
     const T_hold   = T_shrink + holdMs / lifeMs;
     const exScale  = expandScale[0]; // user-controlled expand multiplier
 
+    // Compute right-edge anchor so expansion never detaches from canvas edge
+    const rightEdge = canvasW - CARD_X_OFFSET * itemScale;
     let cardX = x, cardScale = scale, opacity = 1, cardY = y;
 
     if (animProgress < T_enter) {
@@ -397,10 +399,10 @@ export default function VideoExport() {
       cardX = x;
     } else if (animProgress < T_expand) {
       const p = (animProgress - T_pause1) / Math.max(0.001, T_expand - T_pause1);
-      cardScale = scale * (1 + p * (exScale - 1)); cardX = x - (cardScale - scale) * 0.3 * W;
+      cardScale = scale * (1 + p * (exScale - 1)); cardX = rightEdge - CARD_W * cardScale;
     } else if (animProgress < T_shrink) {
       const p = (animProgress - T_expand) / Math.max(0.001, T_shrink - T_expand);
-      cardScale = scale * (exScale - p * (exScale - 1)); cardX = x - (cardScale - scale) * 0.3 * W;
+      cardScale = scale * (exScale - p * (exScale - 1)); cardX = rightEdge - CARD_W * cardScale;
     } else if (animProgress < T_hold) {
       cardX = x;
     } else {
@@ -506,7 +508,7 @@ export default function VideoExport() {
         if (scheduledRef.current.has(evt.id)) return;
         if (tMs >= evt.timestamp * 1000 - 50) {
           scheduledRef.current.add(evt.id);
-          const nc: ActiveCard = { uid: `${evt.id}_p`, event: evt, startTime: evt.timestamp * 1000, duration: cardLifetime[0] * 1000 };
+          const nc: ActiveCard = { uid: `${evt.id}_p`, event: evt, startTime: evt.timestamp * 1000, duration: cardLifetime[0] };
           activeCardsRef.current = [...activeCardsRef.current, nc];
           setActiveCards([...activeCardsRef.current]);
         }
@@ -654,7 +656,7 @@ export default function VideoExport() {
         if (scheduledRef.current.has(evt.id)) return;
         if (tMs >= evt.timestamp * 1000 - 50) {
           scheduledRef.current.add(evt.id);
-          const nc: ActiveCard = { uid: evt.id, event: evt, startTime: evt.timestamp * 1000, duration: cardLifetime[0] * 1000 };
+          const nc: ActiveCard = { uid: evt.id, event: evt, startTime: evt.timestamp * 1000, duration: cardLifetime[0] };
           activeCardsRef.current = [...activeCardsRef.current, nc]; setActiveCards([...activeCardsRef.current]);
         }
       });
@@ -893,6 +895,24 @@ export default function VideoExport() {
                     </svg>
                   </button>
                 )}
+                {/* Clear all */}
+                {markedEvents.length > 0 && (
+                  <button
+                    onClick={() => {
+                      if (window.confirm(lang === 'zh' ? `确定清空全部 ${markedEvents.length} 个标记点？` : `Clear all ${markedEvents.length} marks?`)) {
+                        setMarkedEvents([]);
+                        scheduledRef.current = new Set();
+                        activeCardsRef.current = [];
+                        setActiveCards([]);
+                      }
+                    }}
+                    className="p-1 text-slate-500 hover:text-red-400 transition-colors"
+                    title={lang === 'zh' ? '清空所有标记' : 'Clear all marks'}
+                    data-testid="button-clear-events"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
             </div>
             <p className="text-[11px] text-slate-600 mt-1">
@@ -988,7 +1008,7 @@ export default function VideoExport() {
             <div className="grid grid-cols-2 gap-x-3 gap-y-2.5">
               {[
                 { label: lang==='zh'?'卡片大小':'Scale', val: overlayScale[0].toFixed(1)+'x', slider: <Slider value={overlayScale} onValueChange={setOverlayScale} min={0.5} max={2} step={0.1} /> },
-                { label: lang==='zh'?'消失时间':'Duration', val: cardLifetime[0]+'s', slider: <Slider value={cardLifetime} onValueChange={setCardLifetime} min={3} max={20} step={1} /> },
+                { label: lang==='zh'?'消失时间':'Duration', val: cardLifetime[0]+'ms', slider: <Slider value={cardLifetime} onValueChange={setCardLifetime} min={500} max={20000} step={100} /> },
                 { label: lang==='zh'?'停留放大':'Pause→Expand', val: pauseBeforeExpand[0]+'ms', slider: <Slider value={pauseBeforeExpand} onValueChange={setPauseBeforeExpand} min={100} max={3000} step={100} /> },
                 { label: lang==='zh'?'放大时长':'Expand Time', val: expandDuration[0]+'ms', slider: <Slider value={expandDuration} onValueChange={setExpandDuration} min={100} max={2000} step={100} /> },
                 { label: lang==='zh'?'恢复停留':'Hold After', val: pauseAfterExpand[0]+'ms', slider: <Slider value={pauseAfterExpand} onValueChange={setPauseAfterExpand} min={100} max={3000} step={100} /> },
