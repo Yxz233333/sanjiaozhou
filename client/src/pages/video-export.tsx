@@ -84,6 +84,9 @@ interface SavedSession {
     isText?: true;
     textContent?: string;
     textRarity?: string;
+    customScale?: number;
+    customDuration?: number;
+    customFontSize?: number;
   }>;
 }
 
@@ -197,6 +200,9 @@ export default function VideoExport() {
         isText: e.isText,
         textContent: e.textContent,
         textRarity: e.textRarity,
+        customScale: e.customScale,
+        customDuration: e.customDuration,
+        customFontSize: e.customFontSize,
       }))
     };
     try {
@@ -208,15 +214,62 @@ export default function VideoExport() {
   const restoreSession = (session: SavedSession) => {
     const restored: MarkedEvent[] = [];
     for (const e of session.events) {
+      const overrides = {
+        customScale: e.customScale,
+        customDuration: e.customDuration,
+        customFontSize: e.customFontSize,
+      };
       if (e.isText) {
-        restored.push({ id: e.id, timestamp: e.timestamp, isText: true, textContent: e.textContent, textRarity: e.textRarity });
+        restored.push({ id: e.id, timestamp: e.timestamp, isText: true, textContent: e.textContent, textRarity: e.textRarity, ...overrides });
       } else if (e.itemId) {
         const item = MOCK_ITEMS.find(i => i.id === e.itemId);
-        if (item) restored.push({ id: e.id, timestamp: e.timestamp, item });
+        if (item) restored.push({ id: e.id, timestamp: e.timestamp, item, ...overrides });
       }
     }
     setMarkedEvents(restored.sort((a, b) => a.timestamp - b.timestamp));
     setShowRestorePrompt(false);
+  };
+
+  // ── EXPORT / IMPORT EVENTS JSON ──
+  const handleExportEvents = () => {
+    const session: SavedSession = {
+      videoFileName: videoFile?.name || '',
+      savedAt: Date.now(),
+      events: markedEvents.map(e => ({
+        id: e.id,
+        timestamp: e.timestamp,
+        itemId: e.item?.id,
+        isText: e.isText,
+        textContent: e.textContent,
+        textRarity: e.textRarity,
+        customScale: e.customScale,
+        customDuration: e.customDuration,
+        customFontSize: e.customFontSize,
+      })),
+    };
+    const blob = new Blob([JSON.stringify(session, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const d = new Date(session.savedAt);
+    a.download = `loot-marks-${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}-${String(d.getHours()).padStart(2,'0')}${String(d.getMinutes()).padStart(2,'0')}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const importInputRef = useRef<HTMLInputElement>(null);
+  const handleImportEvents = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const session: SavedSession = JSON.parse(reader.result as string);
+        if (!Array.isArray(session.events)) throw new Error('invalid');
+        restoreSession(session);
+      } catch {
+        alert(lang === 'zh' ? '无法读取该文件，请确认是正确的标记文件。' : 'Could not read file. Please select a valid marks JSON file.');
+      }
+    };
+    reader.readAsText(file);
   };
 
   useEffect(() => { activeCardsRef.current = activeCards; }, [activeCards]);
@@ -401,7 +454,20 @@ export default function VideoExport() {
       const iconY = cardY + (CH - iconSize) / 2;
       ctx.fillStyle = 'rgba(255,255,255,0.05)'; ctx.fillRect(iconX, iconY, iconSize, iconSize);
       const img = item.image ? loadedImagesRef.current[item.id] : null;
-      if (img) { try { ctx.drawImage(img, iconX + 2, iconY + 2, iconSize - 4, iconSize - 4); } catch {} }
+      if (img) {
+        try {
+          // Contain: preserve natural aspect ratio within the icon box
+          const pad = 2;
+          const boxW = iconSize - pad * 2;
+          const boxH = iconSize - pad * 2;
+          const nat = img.naturalWidth && img.naturalHeight ? img.naturalWidth / img.naturalHeight : 1;
+          let dw = boxW, dh = boxH;
+          if (nat > 1) { dh = boxW / nat; } else { dw = boxH * nat; }
+          const dx = iconX + pad + (boxW - dw) / 2;
+          const dy = iconY + pad + (boxH - dh) / 2;
+          ctx.drawImage(img, dx, dy, dw, dh);
+        } catch {}
+      }
       const textX = iconX + iconSize + 8 * itemScale;
       ctx.fillStyle = textColor;
       ctx.font = `bold ${10 * itemScale}px Arial, sans-serif`;
@@ -789,13 +855,48 @@ export default function VideoExport() {
 
         {/* ── RIGHT: EVENTS + EXPORT ── */}
         <div className="w-[330px] flex flex-col bg-[#111] border-l border-slate-800 shrink-0">
+          {/* Hidden import file input */}
+          <input
+            ref={importInputRef}
+            type="file"
+            accept=".json"
+            className="hidden"
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) handleImportEvents(f); e.target.value = ''; }}
+          />
+
           <div className="px-4 py-3 border-b border-slate-800 shrink-0">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-semibold text-slate-300">{lang === 'zh' ? '已标记出货点' : 'Marked Events'}</h2>
-              <span className="text-xs text-violet-400 font-bold bg-violet-400/10 px-2 py-0.5 rounded-full">{markedEvents.length}</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-violet-400 font-bold bg-violet-400/10 px-2 py-0.5 rounded-full">{markedEvents.length}</span>
+                {/* Import */}
+                <button
+                  onClick={() => importInputRef.current?.click()}
+                  className="p-1 text-slate-500 hover:text-sky-400 transition-colors"
+                  title={lang === 'zh' ? '导入标记文件' : 'Import marks JSON'}
+                  data-testid="button-import-events"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1M8 12l4 4m0 0l4-4m-4 4V4" />
+                  </svg>
+                </button>
+                {/* Export */}
+                {markedEvents.length > 0 && (
+                  <button
+                    onClick={handleExportEvents}
+                    className="p-1 text-slate-500 hover:text-green-400 transition-colors"
+                    title={lang === 'zh' ? '导出标记文件' : 'Export marks JSON'}
+                    data-testid="button-export-events"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1M16 12l-4-4m0 0L8 12m4-4v12" />
+                    </svg>
+                  </button>
+                )}
+              </div>
             </div>
             <p className="text-[11px] text-slate-600 mt-1">
-              {lang === 'zh' ? '播放时按 M 键或点右上角「出货」按钮' : 'Press M or click "Loot!" button to mark'}
+              {lang === 'zh' ? '播放时按 M 键或点右上角「出货」按钮 · 右键调整单项' : 'Press M or click "Loot!" · Right-click to adjust per item'}
             </p>
           </div>
 
