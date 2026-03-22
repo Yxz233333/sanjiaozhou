@@ -1339,5 +1339,16 @@
     },
     "subcategory": "purple_card",
     "image": "/images/items/xcmz.png"
+  },
+  {
+    "id": "item_130",
+    "category": "cards",
+    "rarity": "legendary",
+    "name": {
+      "zh": "东区吊桥",
+      "en": "东区吊桥"
+    },
+    "subcategory": "gold_card",
+    "image": "/images/items/dongqudiaoqiao.png"
   }
 ]
