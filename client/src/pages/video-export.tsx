@@ -28,6 +28,7 @@ const RARITIES: Record<string, { color: string; zh: string; en: string; prismati
   purple_card: { color: "#8b5cf6", zh: "紫卡",  en: "Purple Card" },
   blue_card:   { color: "#3b82f6", zh: "蓝卡",  en: "Blue Card" },
   prismatic:   { color: "prismatic", zh: "棱彩",  en: "Prismatic", prismatic: true },
+  junk:        { color: "#9ca3af",   zh: "劣质",  en: "Junk" },
 };
 
 // CSS gradient string for prismatic UI elements
@@ -50,6 +51,56 @@ function makePrismaticGradient(ctx: CanvasRenderingContext2D, x: number, y: numb
 function getPrismaticTextColor(progress: number) {
   const hue = (progress * 360 * 3) % 360;
   return `hsl(${hue},100%,65%)`;
+}
+
+// ── JUNK CRACK DRAWING (module-level, no React deps) ──
+const JUNK_CRACK_SEGS: [number, number][][] = [
+  [[0.60,0.50],[0.40,0.18],[0.20,0.06]],
+  [[0.40,0.18],[0.32,0.36]],
+  [[0.60,0.50],[0.76,0.12],[0.97,0.02]],
+  [[0.76,0.12],[0.88,0.28]],
+  [[0.60,0.50],[0.84,0.52],[1.00,0.50]],
+  [[0.60,0.50],[0.78,0.82],[0.97,0.97]],
+  [[0.60,0.50],[0.56,0.92]],
+  [[0.60,0.50],[0.38,0.80],[0.18,0.97]],
+  [[0.60,0.50],[0.28,0.50],[0.05,0.48]],
+  [[0.28,0.50],[0.24,0.68]],
+  [[0.60,0.50],[0.54,0.20]],
+];
+function drawCrackEffect(
+  ctx: CanvasRenderingContext2D,
+  cardX: number, cardY: number, cw: number, ch: number,
+  crackProgress: number
+) {
+  if (crackProgress <= 0) return;
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  JUNK_CRACK_SEGS.forEach((seg, i) => {
+    const delay = i * 0.07;
+    if (crackProgress <= delay) return;
+    const prog = Math.min(1, (crackProgress - delay) / 0.45);
+    const totalSegs = seg.length - 1;
+    const segsProgress = prog * totalSegs;
+    ctx.beginPath();
+    ctx.moveTo(cardX + seg[0][0] * cw, cardY + seg[0][1] * ch);
+    for (let j = 0; j < totalSegs; j++) {
+      const sp = Math.max(0, Math.min(1, segsProgress - j));
+      const x0 = cardX + seg[j][0] * cw, y0 = cardY + seg[j][1] * ch;
+      const x1 = cardX + seg[j+1][0] * cw, y1 = cardY + seg[j+1][1] * ch;
+      ctx.lineTo(x0 + (x1 - x0) * sp, y0 + (y1 - y0) * sp);
+      if (sp < 1) break;
+    }
+    ctx.strokeStyle = 'rgba(0,0,0,0.85)'; ctx.lineWidth = 1.8; ctx.stroke();
+    ctx.strokeStyle = 'rgba(210,225,240,0.8)'; ctx.lineWidth = 0.9; ctx.stroke();
+  });
+  if (crackProgress > 0.3) {
+    const impX = cardX + 0.60 * cw, impY = cardY + 0.50 * ch;
+    const r = Math.min(5, (crackProgress - 0.3) * 12);
+    ctx.beginPath(); ctx.arc(impX, impY, r, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(210,225,240,0.35)'; ctx.fill();
+  }
+  ctx.restore();
 }
 
 // ── TYPES ──
@@ -489,6 +540,18 @@ export default function VideoExport() {
       if (disp !== name) disp += '…';
       ctx.fillText(disp, textX, cardY + CH * 0.68);
     }
+
+    // ── Junk crack overlay ──
+    if (rarityKey === 'junk') {
+      let crackProgress = 0;
+      if (animProgress >= T_pause1 && animProgress < T_shrink) {
+        crackProgress = (animProgress - T_pause1) / Math.max(0.001, T_shrink - T_pause1);
+      } else if (animProgress >= T_shrink) {
+        crackProgress = 1;
+      }
+      drawCrackEffect(ctx, cardX, cardY, CW, CH, crackProgress);
+    }
+
     ctx.restore();
   }, [lang, cardLifetime, pauseBeforeExpand, expandDuration, pauseAfterExpand, expandScale]);
 

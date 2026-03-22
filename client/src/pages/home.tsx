@@ -150,6 +150,7 @@ const RARITIES: Record<string, { en: string; zh: string; color: string; prismati
   legendary: { en: "Legendary",  zh: "传说", color: "#f59e0b" },
   mythic:    { en: "Mythic",     zh: "神话", color: "#ef4444" },
   prismatic: { en: "Prismatic",  zh: "棱彩", color: "#a855f7", prismatic: true },
+  junk:      { en: "Junk",       zh: "劣质", color: "#9ca3af" },
   red_card:    { en: "Red Card",    zh: "红卡", color: "#ef4444" },
   gold_card:   { en: "Gold Card",   zh: "金卡", color: "#f59e0b" },
   purple_card: { en: "Purple Card", zh: "紫卡", color: "#8b5cf6" },
@@ -969,6 +970,21 @@ export default function Home() {
 }
 
 // Separate component for the animated loot card
+// SVG crack paths for junk rarity overlay — viewBox "0 0 300 80", impact at (180,40)
+const JUNK_SVG_CRACKS = [
+  "M180,40 L120,14 L75,4",
+  "M120,14 L102,30",
+  "M180,40 L232,10 L292,2",
+  "M232,10 L246,26",
+  "M180,40 L255,42 L300,40",
+  "M180,40 L234,70 L293,78",
+  "M180,40 L175,76",
+  "M180,40 L106,68 L52,79",
+  "M180,40 L88,40 L22,38",
+  "M88,40 L80,57",
+  "M180,40 L158,16",
+];
+
 function StackedLootCard({ 
   item, 
   lang,
@@ -1092,6 +1108,55 @@ function StackedLootCard({
           className="absolute left-0 top-0 bottom-0 w-1.5 z-20"
           style={{ backgroundColor: rarityConfig.color, boxShadow: `0 0 10px ${rarityConfig.color}` }}
         />
+
+        {/* Junk rarity — animated glass crack overlay */}
+        {item.rarity === 'junk' && (
+          <svg
+            className="absolute inset-0 w-full h-full pointer-events-none z-30"
+            viewBox="0 0 300 80"
+            preserveAspectRatio="none"
+            style={{ filter: 'drop-shadow(0px 0px 1.5px rgba(0,0,0,0.9))' }}
+          >
+            {JUNK_SVG_CRACKS.map((d, i) => (
+              <motion.path
+                key={i}
+                d={d}
+                stroke="rgba(210,225,240,0.85)"
+                strokeWidth="1.4"
+                fill="none"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                initial={{ pathLength: 0, opacity: 0 }}
+                animate={{ pathLength: 1, opacity: 1 }}
+                transition={{
+                  pathLength: {
+                    delay: T_start_to_center + T_pause_before + i * 0.04,
+                    duration: T_expand * 0.8,
+                    ease: "easeOut",
+                  },
+                  opacity: {
+                    delay: T_start_to_center + T_pause_before + i * 0.04,
+                    duration: 0.05,
+                  },
+                }}
+              />
+            ))}
+            {/* Impact burst */}
+            <motion.circle
+              cx="180" cy="40" r="5"
+              fill="rgba(220,235,250,0.4)"
+              stroke="rgba(210,225,240,0.7)"
+              strokeWidth="1"
+              initial={{ scale: 0, opacity: 0 }}
+              animate={{ scale: 1, opacity: [0, 0.8, 0.4] }}
+              transition={{
+                delay: T_start_to_center + T_pause_before,
+                duration: T_expand * 0.5,
+                ease: "easeOut",
+              }}
+            />
+          </svg>
+        )}
 
         <div className="relative p-2 pl-4 flex items-center gap-4">
           {item.isTextOnly ? (

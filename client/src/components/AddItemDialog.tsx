@@ -10,6 +10,7 @@ const RARITIES_META = [
   { key: "epic",      color: "#8b5cf6", zh: "史诗",  en: "Epic" },
   { key: "rare",      color: "#3b82f6", zh: "稀有",  en: "Rare" },
   { key: "prismatic", color: "",        zh: "棱彩",  en: "Prismatic", gradient: "linear-gradient(90deg,#f43f5e,#f97316,#eab308,#22c55e,#3b82f6,#a855f7)" },
+  { key: "junk",      color: "#9ca3af", zh: "劣质",  en: "Junk" },
 ];
 
 const CARD_SUBS = [
