@@ -29,8 +29,8 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Build
-        run: npm run build
+      - name: Build client
+        run: npx vite build
         env:
           NODE_ENV: production
 
