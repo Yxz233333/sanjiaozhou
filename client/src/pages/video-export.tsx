@@ -11,6 +11,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
+import { useItemLibrary, type LibraryItem } from "@/lib/useItemLibrary";
+import { AddItemDialog } from "@/components/AddItemDialog";
 import MOCK_ITEMS_DATA from "../data.json";
 
 const MOCK_ITEMS: { id: string; category: string; subcategory?: string; rarity: string; name: { zh: string; en: string }; image?: string }[] = MOCK_ITEMS_DATA;
@@ -54,7 +56,7 @@ function getPrismaticTextColor(progress: number) {
 interface MarkedEvent {
   id: string;
   timestamp: number;
-  item?: typeof MOCK_ITEMS[0];
+  item?: LibraryItem;
   isText?: true;
   textContent?: string;
   textRarity?: string;
@@ -145,6 +147,10 @@ export default function VideoExport() {
   const [textInput, setTextInput] = useState('');
   const [textRarity, setTextRarity] = useState('mythic');
 
+  // ── Item library (default + custom, deletable) ──
+  const { allItems, hasDeletedDefaults, addCustomItem, deleteItem, restoreDefaults } = useItemLibrary(MOCK_ITEMS);
+  const [showAddDialog, setShowAddDialog] = useState(false);
+
   // Save state
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saved'>('idle');
   const [savedSession, setSavedSession] = useState<SavedSession | null>(null);
@@ -157,16 +163,16 @@ export default function VideoExport() {
 
   const loadedImagesRef = useRef<Record<string, HTMLImageElement>>({});
 
-  // Load images
+  // Load images (runs whenever allItems changes, picks up custom items too)
   useEffect(() => {
-    MOCK_ITEMS.forEach(item => {
+    allItems.forEach(item => {
       if (item.image && !loadedImagesRef.current[item.id]) {
         const img = new Image();
         img.src = item.image;
         img.onload = () => { loadedImagesRef.current[item.id] = img; };
       }
     });
-  }, []);
+  }, [allItems]);
 
   // Check for saved session on mount
   useEffect(() => {
@@ -222,7 +228,7 @@ export default function VideoExport() {
       if (e.isText) {
         restored.push({ id: e.id, timestamp: e.timestamp, isText: true, textContent: e.textContent, textRarity: e.textRarity, ...overrides });
       } else if (e.itemId) {
-        const item = MOCK_ITEMS.find(i => i.id === e.itemId);
+        const item = allItems.find(i => i.id === e.itemId);
         if (item) restored.push({ id: e.id, timestamp: e.timestamp, item, ...overrides });
       }
     }
@@ -567,7 +573,7 @@ export default function VideoExport() {
     setShowPicker(true);
   }, [isPlaying]);
 
-  const handlePickerSelectItem = (item: typeof MOCK_ITEMS[0]) => {
+  const handlePickerSelectItem = (item: LibraryItem) => {
     const evt: MarkedEvent = { id: `mark_${Date.now()}`, timestamp: parseFloat(pickerTimestamp.toFixed(2)), item };
     setMarkedEvents(prev => [...prev, evt].sort((a, b) => a.timestamp - b.timestamp));
     setShowPicker(false);
@@ -671,7 +677,7 @@ export default function VideoExport() {
   const stopExport = () => { videoRef.current?.pause(); mediaRecorderRef.current?.stop(); cancelAnimationFrame(animFrameRef.current); setIsPlaying(false); };
 
   // Filtered items for picker
-  const filteredItems = MOCK_ITEMS.filter(item => {
+  const filteredItems = allItems.filter(item => {
     const qOk = !pickerQuery || item.name.zh.includes(pickerQuery) || item.name.en.toLowerCase().includes(pickerQuery.toLowerCase());
     const rOk = pickerRarity === 'all' || item.rarity === pickerRarity || item.subcategory === pickerRarity;
     return qOk && rOk;
@@ -1165,7 +1171,18 @@ export default function VideoExport() {
                   <h3 className="font-bold text-slate-100 text-base">{lang === 'zh' ? '添加出货弹窗' : 'Add Loot Card'}</h3>
                   <p className="text-xs text-slate-500 font-mono mt-0.5">@ {formatTime(pickerTimestamp)}</p>
                 </div>
-                <button onClick={() => setShowPicker(false)} className="text-slate-500 hover:text-slate-300 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-800 text-xl leading-none transition-colors">×</button>
+                <div className="flex items-center gap-1.5">
+                  {hasDeletedDefaults && (
+                    <button onClick={restoreDefaults} title={lang === 'zh' ? '恢复默认物品' : 'Restore Defaults'} className="flex items-center gap-1 px-2 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 hover:bg-amber-500/20 text-xs font-medium transition-colors">
+                      <RefreshCcw className="w-3 h-3" />
+                      {lang === 'zh' ? '恢复' : 'Restore'}
+                    </button>
+                  )}
+                  <button onClick={() => setShowAddDialog(true)} title={lang === 'zh' ? '添加自定义物品' : 'Add Custom Item'} className="w-8 h-8 rounded-lg bg-violet-600/15 border border-violet-500/30 text-violet-400 hover:bg-violet-600/25 flex items-center justify-center transition-colors">
+                    <Plus className="w-4 h-4" />
+                  </button>
+                  <button onClick={() => setShowPicker(false)} className="text-slate-500 hover:text-slate-300 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-800 text-xl leading-none transition-colors">×</button>
+                </div>
               </div>
 
               {/* Tabs */}
@@ -1219,16 +1236,25 @@ export default function VideoExport() {
                       ) : filteredItems.map(item => {
                         const def = RARITIES[item.rarity] || RARITIES.mythic;
                         return (
-                          <button key={item.id} onClick={() => handlePickerSelectItem(item)}
-                            className="flex items-center gap-2 p-2.5 bg-slate-800 hover:bg-slate-700 border border-transparent hover:border-amber-500/40 rounded-xl text-left transition-all active:scale-[0.97]"
-                          >
-                            <div className="w-1 h-9 rounded-full shrink-0" style={def.prismatic ? { background: PRISMATIC_GRADIENT } : { backgroundColor: def.color }} />
-                            {item.image ? <img src={item.image} alt="" className="w-8 h-8 object-contain shrink-0" /> : <div className="w-8 h-8 bg-slate-700 rounded shrink-0" />}
-                            <div className="flex-1 min-w-0">
-                              <p className="text-xs text-slate-200 truncate font-medium">{item.name[lang]}</p>
-                              <RarityBadge rarityKey={item.rarity} size="xs" />
-                            </div>
-                          </button>
+                          <div key={item.id} className="group relative">
+                            <button onClick={() => handlePickerSelectItem(item)}
+                              className="w-full flex items-center gap-2 p-2.5 bg-slate-800 hover:bg-slate-700 border border-transparent hover:border-amber-500/40 rounded-xl text-left transition-all active:scale-[0.97]"
+                            >
+                              <div className="w-1 h-9 rounded-full shrink-0" style={def.prismatic ? { background: PRISMATIC_GRADIENT } : { backgroundColor: def.color }} />
+                              {item.image ? <img src={item.image} alt="" className="w-8 h-8 object-contain shrink-0" /> : <div className="w-8 h-8 bg-slate-700 rounded shrink-0" />}
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs text-slate-200 truncate font-medium">{item.name[lang]}</p>
+                                <RarityBadge rarityKey={item.rarity} size="xs" />
+                              </div>
+                            </button>
+                            <button
+                              onClick={e => { e.stopPropagation(); deleteItem(item.id); }}
+                              className="absolute top-1.5 right-1.5 w-5 h-5 rounded bg-slate-700/80 border border-slate-600/50 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-red-500/20 hover:border-red-500/40 hover:text-red-400 text-slate-500 transition-all"
+                              title={lang === 'zh' ? '删除' : 'Delete'}
+                            >
+                              <Trash2 className="w-2.5 h-2.5" />
+                            </button>
+                          </div>
                         );
                       })}
                     </div>
@@ -1300,6 +1326,17 @@ export default function VideoExport() {
               )}
             </motion.div>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Add Custom Item Dialog */}
+      <AnimatePresence>
+        {showAddDialog && (
+          <AddItemDialog
+            lang={lang}
+            onAdd={addCustomItem}
+            onClose={() => setShowAddDialog(false)}
+          />
         )}
       </AnimatePresence>
     </div>

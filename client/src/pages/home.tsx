@@ -24,6 +24,8 @@ import {
   Video
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useItemLibrary } from "@/lib/useItemLibrary";
+import { AddItemDialog } from "@/components/AddItemDialog";
 import MOCK_ITEMS_DATA from "../data.json";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
@@ -373,8 +375,12 @@ export default function Home() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [animatingItems, setAnimatingItems] = useState<SelectedItem[]>([]);
 
+  // ── Item library (default + custom, deletable) ──
+  const { allItems, hasDeletedDefaults, addCustomItem, deleteItem, restoreDefaults } = useItemLibrary(MOCK_ITEMS);
+  const [showAddDialog, setShowAddDialog] = useState(false);
+
   // Derived
-  const filteredItems = MOCK_ITEMS.filter(item => {
+  const filteredItems = allItems.filter(item => {
     if (item.category !== activeCategory) return false;
     if (activeCategory === "cards" && activeSubcategory && item.subcategory !== activeSubcategory) return false;
     return true;
@@ -612,6 +618,26 @@ export default function Home() {
                 })}
               </div>
             )}
+
+            {/* Custom item controls */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowAddDialog(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-violet-600/15 border border-violet-500/30 text-violet-400 hover:bg-violet-600/25 hover:border-violet-500/50 transition-all text-xs font-medium"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                {lang === "zh" ? "添加物品" : "Add Item"}
+              </button>
+              {hasDeletedDefaults && (
+                <button
+                  onClick={restoreDefaults}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-amber-500/10 border border-amber-500/30 text-amber-400 hover:bg-amber-500/20 transition-all text-xs font-medium"
+                >
+                  <RefreshCcw className="w-3 h-3" />
+                  {lang === "zh" ? "恢复默认" : "Restore Defaults"}
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Items Grid */}
@@ -628,14 +654,22 @@ export default function Home() {
                       exit={{ opacity: 0, scale: 0.9 }}
                       transition={{ duration: 0.2 }}
                       key={item.id}
-                      onClick={() => handleAddItem(item)}
-                      className="group relative cursor-pointer flex flex-col bg-slate-900 border border-slate-800 rounded-md overflow-hidden hover:border-slate-600 transition-all hover:shadow-lg active:scale-95"
+                      className="group relative cursor-pointer flex flex-col bg-slate-900 border border-slate-800 rounded-md overflow-hidden hover:border-slate-600 transition-all hover:shadow-lg"
                     >
                       {/* Rarity top border */}
                       <div className="h-1 w-full absolute top-0 left-0 z-10" style={{ backgroundColor: rarityConfig.color }} />
+
+                      {/* Delete button (top-right, shows on hover) */}
+                      <button
+                        onClick={e => { e.stopPropagation(); deleteItem(item.id); }}
+                        className="absolute top-1.5 right-1.5 z-30 w-6 h-6 rounded-md bg-slate-900/80 border border-slate-700/50 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-red-500/20 hover:border-red-500/40 hover:text-red-400 text-slate-500 transition-all"
+                        title={lang === "zh" ? "删除" : "Delete"}
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
                       
-                      {/* Image Preview (Mocked with Icon or Real Image) */}
-                      <div className="aspect-square bg-slate-950 flex items-center justify-center relative overflow-hidden group-hover:bg-slate-900 transition-colors">
+                      {/* Image Preview (Mocked with Icon or Real Image) — click = add item */}
+                      <div onClick={() => handleAddItem(item)} className="aspect-square bg-slate-950 flex items-center justify-center relative overflow-hidden group-hover:bg-slate-900 transition-colors active:scale-95">
                          <div className="absolute inset-0 opacity-10" style={{ backgroundColor: rarityConfig.color }} />
                          
                          {item.image ? (
@@ -656,7 +690,7 @@ export default function Home() {
                       </div>
 
                       {/* Item Details */}
-                      <div className="p-3 border-t border-slate-800 bg-[#111]">
+                      <div onClick={() => handleAddItem(item)} className="p-3 border-t border-slate-800 bg-[#111]">
                         <p className="text-xs text-slate-500 font-display uppercase tracking-widest mb-1 truncate">
                           {rarityConfig[lang]}
                         </p>
@@ -913,6 +947,18 @@ export default function Home() {
           </div>
         </div>
       </div>
+
+      {/* Add Item Dialog */}
+      <AnimatePresence>
+        {showAddDialog && (
+          <AddItemDialog
+            lang={lang}
+            defaultCategory={activeCategory}
+            onAdd={addCustomItem}
+            onClose={() => setShowAddDialog(false)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
