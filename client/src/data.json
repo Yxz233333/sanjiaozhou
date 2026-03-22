@@ -1350,5 +1350,15 @@
     },
     "subcategory": "gold_card",
     "image": "/images/items/dongqudiaoqiao.png"
+  },
+  {
+    "id": "item_131",
+    "category": "2x2",
+    "rarity": "epic",
+    "name": {
+      "zh": "红甲修",
+      "en": "红甲修"
+    },
+    "image": "/images/items/hjx.png"
   }
 ]
