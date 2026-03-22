@@ -142,13 +142,18 @@ const i18n = {
   }
 };
 
-const RARITIES = {
-  common: { en: "Mythic", zh: "神话", color: "#ef4444" },
-  uncommon: { en: "Mythic", zh: "神话", color: "#ef4444" },
-  rare: { en: "Rare", zh: "稀有", color: "#3b82f6" }, // 蓝卡恢复颜色
-  epic: { en: "Epic", zh: "史诗", color: "#8b5cf6" }, // 紫卡恢复颜色
-  legendary: { en: "Legendary", zh: "传说", color: "#f59e0b" }, // 金卡恢复颜色
-  mythic: { en: "Mythic", zh: "神话", color: "#ef4444" }, // 红卡
+const RARITIES: Record<string, { en: string; zh: string; color: string; prismatic?: boolean }> = {
+  common:    { en: "Mythic",     zh: "神话", color: "#ef4444" },
+  uncommon:  { en: "Mythic",     zh: "神话", color: "#ef4444" },
+  rare:      { en: "Rare",       zh: "稀有", color: "#3b82f6" },
+  epic:      { en: "Epic",       zh: "史诗", color: "#8b5cf6" },
+  legendary: { en: "Legendary",  zh: "传说", color: "#f59e0b" },
+  mythic:    { en: "Mythic",     zh: "神话", color: "#ef4444" },
+  prismatic: { en: "Prismatic",  zh: "棱彩", color: "#a855f7", prismatic: true },
+  red_card:    { en: "Red Card",    zh: "红卡", color: "#ef4444" },
+  gold_card:   { en: "Gold Card",   zh: "金卡", color: "#f59e0b" },
+  purple_card: { en: "Purple Card", zh: "紫卡", color: "#8b5cf6" },
+  blue_card:   { en: "Blue Card",   zh: "蓝卡", color: "#3b82f6" },
 };
 
 const CATEGORIES = [
@@ -212,7 +217,7 @@ function SortableItem({
   };
 
   // We use standard color for text-only, or the rarity color if it exists
-  const rarityConfig = item.isTextOnly ? RARITIES.mythic : RARITIES[item.rarity as keyof typeof RARITIES];
+  const rarityConfig = item.isTextOnly ? RARITIES.mythic : (RARITIES[item.rarity] ?? RARITIES.mythic);
 
   const currentTime = item.fixedTime || 0;
   const currentMin = item.fixedTime !== undefined ? Math.floor(currentTime / 60000) : "";
@@ -645,7 +650,7 @@ export default function Home() {
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
               <AnimatePresence mode="popLayout">
                 {filteredItems.map((item) => {
-                  const rarityConfig = RARITIES[item.rarity as keyof typeof RARITIES];
+                  const rarityConfig = RARITIES[item.rarity] ?? RARITIES.mythic;
                   return (
                     <motion.div
                       layout
@@ -982,7 +987,7 @@ function StackedLootCard({
   },
   onComplete: (uid: string) => void
 }) {
-  const rarityConfig = item.isTextOnly ? RARITIES.mythic : RARITIES[item.rarity as keyof typeof RARITIES];
+  const rarityConfig = item.isTextOnly ? RARITIES.mythic : (RARITIES[item.rarity] ?? RARITIES.mythic);
   
   // Create a placeholder based on category
   const placeholderType = item.category === "cards" ? "card_placeholder.png" : `placeholder_${item.category}.png`;
