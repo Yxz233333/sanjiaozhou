@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, startTransition } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Link } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -174,6 +174,27 @@ export default function VideoExport() {
   const [activeCards, setActiveCards] = useState<ActiveCard[]>([]);
   const activeCardsRef = useRef<ActiveCard[]>([]);
   const scheduledRef = useRef<Set<string>>(new Set());
+
+  // ── UI tick: drives currentTime + recordProgress from refs at 100ms intervals ──
+  // This keeps React state updates OUT of the 60fps rAF loop to prevent
+  // the React 18 insertBefore DOM reconciliation crash.
+  const uiTickIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const recordProgressRef = useRef(0);
+
+  const stopUiTick = useCallback(() => {
+    if (uiTickIntervalRef.current !== null) {
+      clearInterval(uiTickIntervalRef.current);
+      uiTickIntervalRef.current = null;
+    }
+  }, []);
+
+  const startUiTick = useCallback(() => {
+    stopUiTick();
+    uiTickIntervalRef.current = setInterval(() => {
+      if (videoRef.current) setCurrentTime(videoRef.current.currentTime);
+      setRecordProgress(recordProgressRef.current);
+    }, 100);
+  }, [stopUiTick]);
 
   const [isRecording, setIsRecording] = useState(false);
   const [recordProgress, setRecordProgress] = useState(0);
@@ -573,7 +594,6 @@ export default function VideoExport() {
   const playbackLoop = useCallback((video: HTMLVideoElement, canvas: HTMLCanvasElement) => {
     const loop = () => {
       const tMs = video.currentTime * 1000;
-      startTransition(() => { setCurrentTime(video.currentTime); });
       markedEventsRef.current.forEach(evt => {
         if (scheduledRef.current.has(evt.id)) return;
         if (tMs >= evt.timestamp * 1000 - 50) {
@@ -584,10 +604,11 @@ export default function VideoExport() {
       });
       renderFrame(video, canvas, activeCardsRef.current, tMs);
       if (!video.paused && !video.ended) animFrameRef.current = requestAnimationFrame(loop);
-      else if (video.ended) { setIsPlaying(false); setIsPaused(false); }
+      else if (video.ended) { stopUiTick(); setCurrentTime(video.currentTime); setIsPlaying(false); setIsPaused(false); }
     };
     animFrameRef.current = requestAnimationFrame(loop);
-  }, [renderFrame, cardLifetime]);
+    startUiTick();
+  }, [renderFrame, cardLifetime, startUiTick, stopUiTick]);
 
   const handlePlay = useCallback(() => {
     const video = videoRef.current; const canvas = canvasRef.current;
@@ -609,12 +630,15 @@ export default function VideoExport() {
     const video = videoRef.current; if (!video) return;
     video.pause();
     cancelAnimationFrame(animFrameRef.current);
+    stopUiTick();
+    setCurrentTime(video.currentTime);
     setIsPlaying(false); setIsPaused(true);
-  }, []);
+  }, [stopUiTick]);
 
   const handleStop = () => {
     const video = videoRef.current; if (!video) return;
     video.pause(); cancelAnimationFrame(animFrameRef.current);
+    stopUiTick();
     setIsPlaying(false); setIsPaused(false);
     setActiveCards([]); activeCardsRef.current = [];
     scheduledRef.current = new Set();
@@ -707,11 +731,12 @@ export default function VideoExport() {
   useEffect(() => {
     return () => {
       cancelAnimationFrame(animFrameRef.current);
+      stopUiTick();
       if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
         try { mediaRecorderRef.current.stop(); } catch {}
       }
     };
-  }, []);
+  }, [stopUiTick]);
 
   // ── EXPORT ──
   const startExport = async () => {
@@ -767,10 +792,8 @@ export default function VideoExport() {
       const loop = () => {
         if (!videoRef.current || !canvasRef.current) { recorder.stop(); return; }
         const tMs = video.currentTime * 1000;
-        startTransition(() => {
-          setRecordProgress(Math.round((video.currentTime / dur) * 100));
-          setCurrentTime(video.currentTime);
-        });
+        // Update ref only — UI tick interval reads this at 100ms cadence (no React setState here)
+        recordProgressRef.current = Math.round((video.currentTime / dur) * 100);
         markedEventsRef.current.forEach(evt => {
           if (scheduledRef.current.has(evt.id)) return;
           if (tMs >= evt.timestamp * 1000 - 50) {
@@ -783,12 +806,14 @@ export default function VideoExport() {
         if (!video.ended && !video.paused) {
           animFrameRef.current = requestAnimationFrame(loop);
         } else {
+          stopUiTick();
           if (recorder.state !== 'inactive') recorder.stop();
         }
       };
 
       await video.play();
       setIsPlaying(true);
+      startUiTick();
       animFrameRef.current = requestAnimationFrame(loop);
     } catch (err) {
       setIsRecording(false);
@@ -799,6 +824,7 @@ export default function VideoExport() {
 
   const stopExport = () => {
     cancelAnimationFrame(animFrameRef.current);
+    stopUiTick();
     videoRef.current?.pause();
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       try { mediaRecorderRef.current.stop(); } catch {}
