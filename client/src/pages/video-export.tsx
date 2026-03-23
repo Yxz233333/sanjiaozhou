@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { flushSync } from "react-dom";
 import { Link } from "wouter";
 import {
   ArrowLeft, Upload, Play, Square, Download,
@@ -150,6 +149,14 @@ const CARD_Y_START = 80;
 const CARD_GAP = 8;
 const MAX_STACK = 4;
 
+// Pure util — defined outside component so it's safe to call from interval callbacks
+function formatTime(secs: number) {
+  const m = Math.floor(secs / 60);
+  const s = Math.floor(secs % 60);
+  const cs = Math.floor((secs % 1) * 100);
+  return `${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}.${cs.toString().padStart(2,'0')}`;
+}
+
 export default function VideoExport() {
   const [lang, setLang] = useState<"zh" | "en">("zh");
 
@@ -174,9 +181,16 @@ export default function VideoExport() {
   const activeCardsRef = useRef<ActiveCard[]>([]);
   const scheduledRef = useRef<Set<string>>(new Set());
 
-  // ── UI tick: drives currentTime + recordProgress from refs at 100ms intervals ──
-  // This keeps React state updates OUT of the 60fps rAF loop to prevent
-  // the React 18 insertBefore DOM reconciliation crash.
+  // ── DOM refs for live-update during playback/recording (zero React re-renders) ──
+  const videoDurationRef = useRef(0);
+  const progressFillRef = useRef<HTMLDivElement>(null);
+  const progressThumbRef = useRef<HTMLDivElement>(null);
+  const timeTextRef = useRef<HTMLSpanElement>(null);
+  const exportProgressFillRef = useRef<HTMLDivElement>(null);
+  const exportProgressTextRef = useRef<HTMLSpanElement>(null);
+  const exportBtnPctRef = useRef<HTMLSpanElement>(null);
+
+  // ── UI tick: directly writes to DOM at 100ms — NO React setState in the loop ──
   const uiTickIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const recordProgressRef = useRef(0);
 
@@ -190,14 +204,27 @@ export default function VideoExport() {
   const startUiTick = useCallback(() => {
     stopUiTick();
     uiTickIntervalRef.current = setInterval(() => {
-      // flushSync forces a synchronous React commit so concurrent renders
-      // can never interleave with this update → eliminates insertBefore crash
-      flushSync(() => {
-        if (videoRef.current) setCurrentTime(videoRef.current.currentTime);
-        setRecordProgress(recordProgressRef.current);
-      });
+      const t = videoRef.current?.currentTime ?? 0;
+      const dur = videoDurationRef.current || 1;
+      const pct = (t / dur) * 100;
+      const rPct = recordProgressRef.current;
+      if (timeTextRef.current) timeTextRef.current.textContent = formatTime(t);
+      if (progressFillRef.current) progressFillRef.current.style.width = `${pct}%`;
+      if (progressThumbRef.current) progressThumbRef.current.style.left = `${pct}%`;
+      if (exportProgressFillRef.current) exportProgressFillRef.current.style.width = `${rPct}%`;
+      if (exportProgressTextRef.current) exportProgressTextRef.current.textContent = `合成渲染中 ${rPct}%`;
+      if (exportBtnPctRef.current) exportBtnPctRef.current.textContent = lang === 'zh' ? `停止 ${rPct}%` : `Stop ${rPct}%`;
     }, 100);
-  }, [stopUiTick]);
+  }, [stopUiTick, lang]);
+
+  // Sync time display + progress bar DOM directly (called on seek/stop/reset too)
+  const syncTimeToDOM = useCallback((t: number) => {
+    const dur = videoDurationRef.current || 1;
+    const pct = (t / dur) * 100;
+    if (timeTextRef.current) timeTextRef.current.textContent = formatTime(t);
+    if (progressFillRef.current) progressFillRef.current.style.width = `${pct}%`;
+    if (progressThumbRef.current) progressThumbRef.current.style.left = `${pct}%`;
+  }, []);
 
   const [isRecording, setIsRecording] = useState(false);
   const [recordProgress, setRecordProgress] = useState(0);
@@ -355,18 +382,12 @@ export default function VideoExport() {
   };
 
 
-  const formatTime = (secs: number) => {
-    const m = Math.floor(secs / 60);
-    const s = Math.floor(secs % 60);
-    const cs = Math.floor((secs % 1) * 100);
-    return `${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}.${cs.toString().padStart(2,'0')}`;
-  };
 
   const handleFileInput = (file: File) => {
     if (!file.type.startsWith('video/')) return;
     setVideoFile(file);
     setVideoUrl(URL.createObjectURL(file));
-    setCurrentTime(0);
+    setCurrentTime(0); syncTimeToDOM(0);
     setIsPlaying(false); setIsPaused(false);
     setExportDone(false); setExportUrl(null);
     scheduledRef.current = new Set();
@@ -383,6 +404,7 @@ export default function VideoExport() {
   const handleVideoLoaded = () => {
     const v = videoRef.current; if (!v) return;
     setVideoDuration(v.duration);
+    videoDurationRef.current = v.duration;
     setVideoSize({ w: v.videoWidth || 1920, h: v.videoHeight || 1080 });
     const canvas = canvasRef.current;
     if (canvas) {
@@ -408,7 +430,7 @@ export default function VideoExport() {
         const video = videoRef.current; if (!video) return;
         const step = e.shiftKey ? 1 : 0.1;
         video.currentTime = Math.max(0, video.currentTime - step);
-        setCurrentTime(video.currentTime);
+        setCurrentTime(video.currentTime); syncTimeToDOM(video.currentTime);
         if (!isPlaying) {
           const canvas = canvasRef.current;
           if (canvas) canvas.getContext('2d')!.drawImage(video, 0, 0);
@@ -418,7 +440,7 @@ export default function VideoExport() {
         const video = videoRef.current; if (!video) return;
         const step = e.shiftKey ? 1 : 0.1;
         video.currentTime = Math.min(video.duration, video.currentTime + step);
-        setCurrentTime(video.currentTime);
+        setCurrentTime(video.currentTime); syncTimeToDOM(video.currentTime);
         if (!isPlaying) {
           const canvas = canvasRef.current;
           if (canvas) canvas.getContext('2d')!.drawImage(video, 0, 0);
@@ -606,7 +628,7 @@ export default function VideoExport() {
       });
       renderFrame(video, canvas, activeCardsRef.current, tMs);
       if (!video.paused && !video.ended) animFrameRef.current = requestAnimationFrame(loop);
-      else if (video.ended) { stopUiTick(); setCurrentTime(video.currentTime); setIsPlaying(false); setIsPaused(false); }
+      else if (video.ended) { stopUiTick(); setCurrentTime(video.currentTime); syncTimeToDOM(video.currentTime); setIsPlaying(false); setIsPaused(false); }
     };
     animFrameRef.current = requestAnimationFrame(loop);
     startUiTick();
@@ -623,7 +645,7 @@ export default function VideoExport() {
       video.currentTime = 0;
       scheduledRef.current = new Set();
       activeCardsRef.current = [];
-      setCurrentTime(0);
+      setCurrentTime(0); syncTimeToDOM(0);
       video.play().then(() => { setIsPlaying(true); setIsPaused(false); playbackLoop(video, canvas); });
     }
   }, [videoSize, isPaused, playbackLoop]);
@@ -633,7 +655,7 @@ export default function VideoExport() {
     video.pause();
     cancelAnimationFrame(animFrameRef.current);
     stopUiTick();
-    setCurrentTime(video.currentTime);
+    setCurrentTime(video.currentTime); syncTimeToDOM(video.currentTime);
     setIsPlaying(false); setIsPaused(true);
   }, [stopUiTick]);
 
@@ -644,7 +666,7 @@ export default function VideoExport() {
     setIsPlaying(false); setIsPaused(false);
     activeCardsRef.current = [];
     scheduledRef.current = new Set();
-    video.currentTime = 0; setCurrentTime(0);
+    video.currentTime = 0; setCurrentTime(0); syncTimeToDOM(0);
     const canvas = canvasRef.current;
     if (canvas) canvas.getContext('2d')!.drawImage(video, 0, 0);
   };
@@ -702,7 +724,7 @@ export default function VideoExport() {
     const video = videoRef.current; if (!video) return;
     const t = pct * videoDuration;
     const tMs = t * 1000;
-    video.currentTime = t; setCurrentTime(t);
+    video.currentTime = t; setCurrentTime(t); syncTimeToDOM(t);
     // Only mark events strictly before seek point as "already shown"
     scheduledRef.current = new Set(
       markedEventsRef.current.filter(e => e.timestamp * 1000 < tMs).map(e => e.id)
@@ -935,9 +957,9 @@ export default function VideoExport() {
               {isRecording && (
                 <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-red-900/90 border border-red-700 rounded-full px-4 py-1.5 flex items-center gap-3 pointer-events-none">
                   <div className="w-2 h-2 bg-red-400 rounded-full animate-pulse" />
-                  <span className="text-sm text-red-200 font-bold">合成渲染中 {recordProgress}%</span>
+                  <span ref={exportProgressTextRef} className="text-sm text-red-200 font-bold">合成渲染中 0%</span>
                   <div className="w-20 h-1.5 bg-red-900 rounded-full overflow-hidden">
-                    <div className="h-full bg-red-400 rounded-full transition-none" style={{ width: `${recordProgress}%` }} />
+                    <div ref={exportProgressFillRef} className="h-full bg-red-400 rounded-full transition-none" style={{ width: '0%' }} />
                   </div>
                 </div>
               )}
@@ -973,7 +995,7 @@ export default function VideoExport() {
                   className="relative w-full h-3 bg-slate-700 rounded-full cursor-pointer select-none"
                   onMouseDown={handleProgressMouseDown}
                 >
-                  <div className="h-full bg-violet-500 rounded-full pointer-events-none transition-none" style={{ width: `${videoDuration > 0 ? (currentTime / videoDuration) * 100 : 0}%` }} />
+                  <div ref={progressFillRef} className="h-full bg-violet-500 rounded-full pointer-events-none transition-none" style={{ width: '0%' }} />
                   {markedEvents.map(evt => {
                     const rk = evt.isText ? (evt.textRarity || 'mythic') : (evt.item?.rarity || 'mythic');
                     const def = RARITIES[rk] || RARITIES.mythic;
@@ -984,13 +1006,13 @@ export default function VideoExport() {
                     );
                   })}
                   {/* Playhead */}
-                  <div className="absolute top-1/2 w-3.5 h-3.5 bg-white rounded-full border-2 border-slate-900 pointer-events-none shadow-md"
-                    style={{ left: `${videoDuration > 0 ? (currentTime / videoDuration) * 100 : 0}%`, transform: 'translate(-50%,-50%)' }}
+                  <div ref={progressThumbRef} className="absolute top-1/2 w-3.5 h-3.5 bg-white rounded-full border-2 border-slate-900 pointer-events-none shadow-md"
+                    style={{ left: '0%', transform: 'translate(-50%,-50%)' }}
                   />
                 </div>
 
                 <div className="flex items-center gap-3">
-                  <span className="text-xs text-slate-400 font-mono shrink-0">{formatTime(currentTime)}</span>
+                  <span ref={timeTextRef} className="text-xs text-slate-400 font-mono shrink-0">00:00.00</span>
                   <div className="flex items-center gap-1.5 flex-1 justify-center">
                     {(isPlaying || isPaused) && (
                       <button onClick={handleStop} className="w-7 h-7 flex items-center justify-center bg-slate-700 hover:bg-slate-600 rounded-full transition-colors" title="停止">
@@ -1193,7 +1215,7 @@ export default function VideoExport() {
                 onClick={isRecording ? stopExport : startExport}
                 disabled={markedEvents.length === 0 || (isPlaying && !isRecording)}
               >
-                {isRecording ? <><Square className="w-4 h-4 mr-2" />{lang === 'zh' ? `停止 ${recordProgress}%` : `Stop ${recordProgress}%`}</> : <><Film className="w-4 h-4 mr-2" />{lang === 'zh' ? '合成并导出' : 'Render & Export'}</>}
+                {isRecording ? <><Square className="w-4 h-4 mr-2" /><span ref={exportBtnPctRef}>{lang === 'zh' ? '停止 0%' : 'Stop 0%'}</span></> : <><Film className="w-4 h-4 mr-2" />{lang === 'zh' ? '合成并导出' : 'Render & Export'}</>}
               </Button>
             ) : (
               <div className="space-y-2">
