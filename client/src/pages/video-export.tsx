@@ -704,41 +704,107 @@ export default function VideoExport() {
   };
   const handleProgressMouseUp = () => { isDraggingRef.current = false; };
 
+  // Cleanup on unmount: cancel animation frame and stop MediaRecorder
+  useEffect(() => {
+    return () => {
+      cancelAnimationFrame(animFrameRef.current);
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        try { mediaRecorderRef.current.stop(); } catch {}
+      }
+    };
+  }, []);
+
   // ── EXPORT ──
   const startExport = async () => {
     const video = videoRef.current; const canvas = canvasRef.current; if (!video || !canvas) return;
-    canvas.width = videoSize.w; canvas.height = videoSize.h;
-    video.currentTime = 0; scheduledRef.current = new Set();
-    setActiveCards([]); activeCardsRef.current = [];
-    chunksRef.current = []; setExportDone(false); setExportUrl(null); setRecordProgress(0);
-    const stream = canvas.captureStream(30);
-    const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm';
-    const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 8_000_000 });
-    mediaRecorderRef.current = recorder;
-    recorder.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data); };
-    recorder.onstop = () => { setExportUrl(URL.createObjectURL(new Blob(chunksRef.current, { type: mimeType }))); setExportDone(true); setIsRecording(false); cancelAnimationFrame(animFrameRef.current); };
-    recorder.start(100); setIsRecording(true);
-    const dur = video.duration;
-    const loop = () => {
-      const tMs = video.currentTime * 1000;
-      setRecordProgress(Math.round((video.currentTime / dur) * 100)); setCurrentTime(video.currentTime);
-      markedEventsRef.current.forEach(evt => {
-        if (scheduledRef.current.has(evt.id)) return;
-        if (tMs >= evt.timestamp * 1000 - 50) {
-          scheduledRef.current.add(evt.id);
-          const nc: ActiveCard = { uid: evt.id, event: evt, startTime: evt.timestamp * 1000, duration: cardLifetime[0] };
-          activeCardsRef.current = [...activeCardsRef.current, nc]; setActiveCards([...activeCardsRef.current]);
-        }
+
+    // Cancel any existing animation loop first
+    cancelAnimationFrame(animFrameRef.current);
+    // Stop any in-progress recording
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      try { mediaRecorderRef.current.stop(); } catch {}
+    }
+    // Pause and reset video
+    video.pause();
+    setIsPlaying(false); setIsPaused(false);
+
+    try {
+      canvas.width = videoSize.w; canvas.height = videoSize.h;
+      scheduledRef.current = new Set();
+      setActiveCards([]); activeCardsRef.current = [];
+      chunksRef.current = []; setExportDone(false); setExportUrl(null); setRecordProgress(0);
+
+      // Wait for seek to complete before starting playback
+      await new Promise<void>((resolve) => {
+        const onSeeked = () => { video.removeEventListener('seeked', onSeeked); resolve(); };
+        video.addEventListener('seeked', onSeeked);
+        video.currentTime = 0;
+        // If already at 0, seeked may not fire
+        if (video.currentTime === 0) { video.removeEventListener('seeked', onSeeked); resolve(); }
       });
-      renderFrame(video, canvas, activeCardsRef.current, tMs);
-      if (!video.ended && !video.paused) animFrameRef.current = requestAnimationFrame(loop);
-      else recorder.stop();
-    };
-    await video.play(); setIsPlaying(true); setIsPaused(false);
-    animFrameRef.current = requestAnimationFrame(loop);
+
+      const stream = canvas.captureStream(30);
+      const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
+        ? 'video/webm;codecs=vp9'
+        : MediaRecorder.isTypeSupported('video/webm')
+          ? 'video/webm'
+          : '';
+      if (!mimeType) throw new Error('当前浏览器不支持 WebM 视频录制，请使用 Chrome 或 Edge。');
+
+      const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 8_000_000 });
+      mediaRecorderRef.current = recorder;
+      recorder.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+      recorder.onstop = () => {
+        cancelAnimationFrame(animFrameRef.current);
+        if (chunksRef.current.length > 0) {
+          setExportUrl(URL.createObjectURL(new Blob(chunksRef.current, { type: mimeType })));
+          setExportDone(true);
+        }
+        setIsRecording(false);
+      };
+      recorder.start(100); setIsRecording(true);
+
+      const dur = video.duration || 1;
+      const loop = () => {
+        if (!videoRef.current || !canvasRef.current) { recorder.stop(); return; }
+        const tMs = video.currentTime * 1000;
+        setRecordProgress(Math.round((video.currentTime / dur) * 100));
+        setCurrentTime(video.currentTime);
+        markedEventsRef.current.forEach(evt => {
+          if (scheduledRef.current.has(evt.id)) return;
+          if (tMs >= evt.timestamp * 1000 - 50) {
+            scheduledRef.current.add(evt.id);
+            const nc: ActiveCard = { uid: evt.id, event: evt, startTime: evt.timestamp * 1000, duration: cardLifetime[0] };
+            activeCardsRef.current = [...activeCardsRef.current, nc]; setActiveCards([...activeCardsRef.current]);
+          }
+        });
+        renderFrame(video, canvas, activeCardsRef.current, tMs);
+        if (!video.ended && !video.paused) {
+          animFrameRef.current = requestAnimationFrame(loop);
+        } else {
+          if (recorder.state !== 'inactive') recorder.stop();
+        }
+      };
+
+      await video.play();
+      setIsPlaying(true);
+      animFrameRef.current = requestAnimationFrame(loop);
+    } catch (err) {
+      setIsRecording(false);
+      const msg = err instanceof Error ? err.message : String(err);
+      alert(`导出失败：${msg}`);
+    }
   };
 
-  const stopExport = () => { videoRef.current?.pause(); mediaRecorderRef.current?.stop(); cancelAnimationFrame(animFrameRef.current); setIsPlaying(false); };
+  const stopExport = () => {
+    cancelAnimationFrame(animFrameRef.current);
+    videoRef.current?.pause();
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      try { mediaRecorderRef.current.stop(); } catch {}
+    }
+    setIsPlaying(false);
+    setIsRecording(false);
+  };
 
   // Filtered items for picker
   const filteredItems = allItems.filter(item => {
