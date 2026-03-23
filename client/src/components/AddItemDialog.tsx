@@ -1,5 +1,4 @@
 import { useState, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
 import { Upload, X, ImageIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { compressImageToDataUrl, type LibraryItem } from "@/lib/useItemLibrary";
@@ -66,16 +65,14 @@ export function AddItemDialog({ lang, defaultCategory, onAdd, onClose }: Props) 
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+    <div
       className="fixed inset-0 bg-black/80 z-[200] flex items-center justify-center p-4"
+      style={{ animation: 'dialog-fade-in 0.15s ease both' }}
       onClick={onClose}
     >
-      <motion.div
-        initial={{ scale: 0.93, opacity: 0, y: 12 }} animate={{ scale: 1, opacity: 1, y: 0 }}
-        exit={{ scale: 0.9, opacity: 0 }}
-        transition={{ type: "spring", stiffness: 340, damping: 28 }}
+      <div
         className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden"
+        style={{ animation: 'dialog-slide-in 0.18s ease both' }}
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -226,7 +223,7 @@ export function AddItemDialog({ lang, defaultCategory, onAdd, onClose }: Props) 
             </button>
           </div>
         </div>
-      </motion.div>
-    </motion.div>
+      </div>
+    </div>
   );
 }

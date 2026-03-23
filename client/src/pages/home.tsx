@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Link } from "wouter";
-import { motion, AnimatePresence, useAnimation } from "framer-motion";
+import { motion, useAnimation } from "framer-motion";
 import { 
   Settings, 
   Play, 
@@ -695,18 +695,14 @@ export default function Home() {
           {/* Items Grid */}
           <ScrollArea className="flex-1 p-6">
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-              <AnimatePresence mode="popLayout">
+              <>
                 {filteredItems.map((item) => {
                   const rarityConfig = RARITIES[item.rarity] ?? RARITIES.mythic;
                   return (
-                    <motion.div
-                      layout
-                      initial={{ opacity: 0, scale: 0.9 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.9 }}
-                      transition={{ duration: 0.2 }}
+                    <div
                       key={item.id}
                       className="group relative cursor-pointer flex flex-col bg-slate-900 border border-slate-800 rounded-md overflow-hidden hover:border-slate-600 transition-all hover:shadow-lg"
+                      style={{ animation: 'item-fade-in 0.18s ease both' }}
                     >
                       {/* Rarity top border */}
                       <div className="h-1 w-full absolute top-0 left-0 z-10" style={{ backgroundColor: rarityConfig.color }} />
@@ -750,10 +746,10 @@ export default function Home() {
                           {item.name[lang]}
                         </h3>
                       </div>
-                    </motion.div>
+                    </div>
                   );
                 })}
-              </AnimatePresence>
+              </>
             </div>
           </ScrollArea>
         </div>
@@ -788,7 +784,6 @@ export default function Home() {
                style={{ backgroundColor: bgColor }}
              >
                <div className="absolute top-8 right-8 flex flex-col gap-3 w-[280px]">
-                 <AnimatePresence mode="sync">
                    {animatingItems.map((item, idx) => (
                      <StackedLootCard 
                        key={item.uid} 
@@ -805,7 +800,6 @@ export default function Home() {
                        onComplete={handleItemComplete}
                      />
                    ))}
-                 </AnimatePresence>
                </div>
              </div>
           </div>
@@ -1020,16 +1014,14 @@ export default function Home() {
       </div>
 
       {/* Add Item Dialog */}
-      <AnimatePresence>
-        {showAddDialog && (
-          <AddItemDialog
-            lang={lang}
-            defaultCategory={activeCategory}
-            onAdd={addCustomItem}
-            onClose={() => setShowAddDialog(false)}
-          />
-        )}
-      </AnimatePresence>
+      {showAddDialog && (
+        <AddItemDialog
+          lang={lang}
+          defaultCategory={activeCategory}
+          onAdd={addCustomItem}
+          onClose={() => setShowAddDialog(false)}
+        />
+      )}
     </div>
   );
 }
