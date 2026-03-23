@@ -181,6 +181,11 @@ export default function VideoExport() {
   const activeCardsRef = useRef<ActiveCard[]>([]);
   const scheduledRef = useRef<Set<string>>(new Set());
 
+  // ── AudioContext for reliable audio capture during export ──
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const audioSourceRef = useRef<MediaElementAudioSourceNode | null>(null);
+  const audioDestRef = useRef<MediaStreamAudioDestinationNode | null>(null);
+
   // ── DOM refs for live-update during playback/recording (zero React re-renders) ──
   const videoDurationRef = useRef(0);
   const exportMimeRef = useRef<string>('video/webm');
@@ -751,7 +756,7 @@ export default function VideoExport() {
   };
   const handleProgressMouseUp = () => { isDraggingRef.current = false; };
 
-  // Cleanup on unmount: cancel animation frame and stop MediaRecorder
+  // Cleanup on unmount: cancel animation frame, stop MediaRecorder, close AudioContext
   useEffect(() => {
     return () => {
       cancelAnimationFrame(animFrameRef.current);
@@ -759,6 +764,7 @@ export default function VideoExport() {
       if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
         try { mediaRecorderRef.current.stop(); } catch {}
       }
+      try { audioCtxRef.current?.close(); } catch {}
     };
   }, [stopUiTick]);
 
@@ -793,15 +799,30 @@ export default function VideoExport() {
 
       const stream = canvas.captureStream(60);
 
-      // ── Capture audio from the video element and mix into the recording ──
+      // ── AudioContext route: most reliable way to capture video audio in Chrome ──
       try {
-        const videoStream = (video as any).captureStream?.() ?? (video as any).mozCaptureStream?.();
-        if (videoStream) {
-          videoStream.getAudioTracks().forEach((track: MediaStreamTrack) => stream.addTrack(track));
+        if (!audioCtxRef.current) {
+          audioCtxRef.current = new AudioContext();
         }
-      } catch (e) { /* audio capture unavailable — continue without audio */ }
+        const audioCtx = audioCtxRef.current;
+        if (audioCtx.state === 'suspended') await audioCtx.resume();
+        // createMediaElementSource can only be called once per element — reuse the node
+        if (!audioSourceRef.current) {
+          audioSourceRef.current = audioCtx.createMediaElementSource(video);
+        }
+        if (!audioDestRef.current) {
+          audioDestRef.current = audioCtx.createMediaStreamDestination();
+        }
+        // reconnect: source → speakers + source → recorder destination
+        audioSourceRef.current.disconnect();
+        audioSourceRef.current.connect(audioCtx.destination);     // keep audio playing
+        audioSourceRef.current.connect(audioDestRef.current);     // also pipe to recorder
+        audioDestRef.current.stream.getAudioTracks().forEach(t => stream.addTrack(t));
+      } catch (e) {
+        console.warn('AudioContext audio capture failed:', e);
+      }
 
-      // ── WebM with best available codec ──
+      // ── WebM VP9: high bitrate ≈ near-lossless quality ──
       const mimeType =
         MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus') ? 'video/webm;codecs=vp9,opus' :
         MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' :
@@ -811,8 +832,8 @@ export default function VideoExport() {
 
       const recorder = new MediaRecorder(stream, {
         mimeType,
-        videoBitsPerSecond: 20_000_000,
-        audioBitsPerSecond: 192_000,
+        videoBitsPerSecond: 50_000_000,   // 50 Mbps ≈ visually lossless for 1080p VP9
+        audioBitsPerSecond: 320_000,
       });
       mediaRecorderRef.current = recorder;
       recorder.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data); };
