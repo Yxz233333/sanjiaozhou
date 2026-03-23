@@ -791,7 +791,7 @@ export default function VideoExport() {
         if (video.currentTime === 0) { video.removeEventListener('seeked', onSeeked); resolve(); }
       });
 
-      const stream = canvas.captureStream(30);
+      const stream = canvas.captureStream(60);
 
       // ── Capture audio from the video element and mix into the recording ──
       try {
@@ -801,17 +801,19 @@ export default function VideoExport() {
         }
       } catch (e) { /* audio capture unavailable — continue without audio */ }
 
-      // ── Prefer MP4 (H.264 + AAC), fall back to WebM ──
+      // ── WebM with best available codec ──
       const mimeType =
-        MediaRecorder.isTypeSupported('video/mp4;codecs=avc1,mp4a.40.2') ? 'video/mp4;codecs=avc1,mp4a.40.2' :
-        MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' :
         MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus') ? 'video/webm;codecs=vp9,opus' :
         MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' :
         MediaRecorder.isTypeSupported('video/webm') ? 'video/webm' : '';
-      if (!mimeType) throw new Error('当前浏览器不支持视频录制，请使用 Chrome、Edge 或 Safari。');
+      if (!mimeType) throw new Error('当前浏览器不支持视频录制，请使用 Chrome 或 Edge。');
       exportMimeRef.current = mimeType;
 
-      const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 12_000_000 });
+      const recorder = new MediaRecorder(stream, {
+        mimeType,
+        videoBitsPerSecond: 20_000_000,
+        audioBitsPerSecond: 192_000,
+      });
       mediaRecorderRef.current = recorder;
       recorder.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data); };
       recorder.onstop = () => {

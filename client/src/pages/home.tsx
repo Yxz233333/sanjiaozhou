@@ -805,8 +805,8 @@ export default function Home() {
           </div>
 
           <div className="flex-1 flex flex-col overflow-hidden">
-            {/* SETTINGS BAR */}
-            <div className="p-4 border-b border-slate-800 space-y-4 shrink-0 bg-[#0d0d0d]">
+            {/* SETTINGS BAR — max-height + scroll so it never clips on small screens */}
+            <div className="p-4 border-b border-slate-800 space-y-4 bg-[#0d0d0d] overflow-y-auto" style={{ flex: '0 0 auto', maxHeight: 'calc(100vh - 360px)', minHeight: 0 }}>
               <div className="flex items-center gap-4">
                 <div className="flex-1">
                   <Label className="text-[10px] text-slate-400 mb-2 block">{t.bgColor}</Label>
