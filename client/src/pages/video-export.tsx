@@ -219,6 +219,7 @@ export default function VideoExport() {
     allItems.forEach(item => {
       if (item.image && !loadedImagesRef.current[item.id]) {
         const img = new Image();
+        img.crossOrigin = 'anonymous';
         img.src = item.image;
         img.onload = () => { loadedImagesRef.current[item.id] = img; };
       }

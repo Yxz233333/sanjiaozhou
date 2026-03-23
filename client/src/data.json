@@ -76,7 +76,7 @@
   {
     "id": "item_8",
     "category": "2x1",
-    "rarity": "rare",
+    "rarity": "mythic",
     "name": {
       "zh": "香槟",
       "en": "香槟"
@@ -86,7 +86,7 @@
   {
     "id": "item_9",
     "category": "2x2",
-    "rarity": "epic",
+    "rarity": "mythic",
     "name": {
       "zh": "无人机",
       "en": "无人机"
@@ -96,7 +96,7 @@
   {
     "id": "item_10",
     "category": "2x3",
-    "rarity": "epic",
+    "rarity": "mythic",
     "name": {
       "zh": "军用信息终端",
       "en": "军用信息终端"
@@ -116,7 +116,7 @@
   {
     "id": "item_12",
     "category": "3x2",
-    "rarity": "legendary",
+    "rarity": "mythic",
     "name": {
       "zh": "医疗机械人",
       "en": "医疗机械人"
@@ -240,7 +240,7 @@
   {
     "id": "item_24",
     "category": "2x1",
-    "rarity": "rare",
+    "rarity": "mythic",
     "name": {
       "zh": "金条",
       "en": "金条"
@@ -250,7 +250,7 @@
   {
     "id": "item_25",
     "category": "2x2",
-    "rarity": "epic",
+    "rarity": "mythic",
     "name": {
       "zh": "摄像机",
       "en": "摄像机"
@@ -260,7 +260,7 @@
   {
     "id": "item_26",
     "category": "2x3",
-    "rarity": "epic",
+    "rarity": "mythic",
     "name": {
       "zh": "笔记本电脑",
       "en": "笔记本电脑"
@@ -270,7 +270,7 @@
   {
     "id": "item_27",
     "category": "3x2",
-    "rarity": "legendary",
+    "rarity": "mythic",
     "name": {
       "zh": "自动体外除颤器",
       "en": "自动体外除颤器"
@@ -374,7 +374,7 @@
   {
     "id": "item_37",
     "category": "2x1",
-    "rarity": "rare",
+    "rarity": "mythic",
     "name": {
       "zh": "炫彩拉小宅",
       "en": "炫彩拉小宅"
@@ -384,7 +384,7 @@
   {
     "id": "item_38",
     "category": "2x2",
-    "rarity": "epic",
+    "rarity": "mythic",
     "name": {
       "zh": "军用电台",
       "en": "军用电台"
@@ -394,7 +394,7 @@
   {
     "id": "item_39",
     "category": "2x3",
-    "rarity": "epic",
+    "rarity": "mythic",
     "name": {
       "zh": "飞行记录仪",
       "en": "飞行记录仪"
@@ -404,7 +404,7 @@
   {
     "id": "item_40",
     "category": "3x2",
-    "rarity": "legendary",
+    "rarity": "mythic",
     "name": {
       "zh": "强力吸尘器",
       "en": "强力吸尘器"
@@ -487,7 +487,7 @@
   {
     "id": "item_48",
     "category": "2x1",
-    "rarity": "rare",
+    "rarity": "mythic",
     "name": {
       "zh": "炫彩威小龙",
       "en": "炫彩威小龙"
@@ -497,7 +497,7 @@
   {
     "id": "item_49",
     "category": "2x2",
-    "rarity": "epic",
+    "rarity": "mythic",
     "name": {
       "zh": "呼吸机",
       "en": "呼吸机"
@@ -507,7 +507,7 @@
   {
     "id": "item_50",
     "category": "2x3",
-    "rarity": "epic",
+    "rarity": "mythic",
     "name": {
       "zh": "军用炮弹",
       "en": "军用炮弹"
@@ -517,7 +517,7 @@
   {
     "id": "item_51",
     "category": "3x2",
-    "rarity": "legendary",
+    "rarity": "mythic",
     "name": {
       "zh": "人头像",
       "en": "人头像"
@@ -600,7 +600,7 @@
   {
     "id": "item_59",
     "category": "2x1",
-    "rarity": "rare",
+    "rarity": "mythic",
     "name": {
       "zh": "手弩赤小枭",
       "en": "手弩赤小枭"
@@ -610,7 +610,7 @@
   {
     "id": "item_60",
     "category": "2x2",
-    "rarity": "epic",
+    "rarity": "mythic",
     "name": {
       "zh": "瞪羚",
       "en": "瞪羚"
@@ -620,7 +620,7 @@
   {
     "id": "item_61",
     "category": "2x3",
-    "rarity": "epic",
+    "rarity": "mythic",
     "name": {
       "zh": "步战车模型",
       "en": "步战车模型"
@@ -630,7 +630,7 @@
   {
     "id": "item_62",
     "category": "3x2",
-    "rarity": "legendary",
+    "rarity": "mythic",
     "name": {
       "zh": "留声机",
       "en": "留声机"
@@ -703,7 +703,7 @@
   {
     "id": "item_69",
     "category": "2x1",
-    "rarity": "rare",
+    "rarity": "mythic",
     "name": {
       "zh": "高级咖啡豆",
       "en": "高级咖啡豆"
@@ -713,7 +713,7 @@
   {
     "id": "item_70",
     "category": "2x2",
-    "rarity": "epic",
+    "rarity": "mythic",
     "name": {
       "zh": "天圆地方",
       "en": "天圆地方"
@@ -723,7 +723,7 @@
   {
     "id": "item_71",
     "category": "2x3",
-    "rarity": "epic",
+    "rarity": "mythic",
     "name": {
       "zh": "云存储阵列",
       "en": "云存储阵列"
@@ -786,7 +786,7 @@
   {
     "id": "item_77",
     "category": "2x2",
-    "rarity": "epic",
+    "rarity": "mythic",
     "name": {
       "zh": "便携式生命支持系统",
       "en": "便携式生命支持系统"
@@ -796,7 +796,7 @@
   {
     "id": "item_78",
     "category": "2x3",
-    "rarity": "epic",
+    "rarity": "mythic",
     "name": {
       "zh": "装甲车电池",
       "en": "装甲车电池"
@@ -859,7 +859,7 @@
   {
     "id": "item_84",
     "category": "2x2",
-    "rarity": "epic",
+    "rarity": "mythic",
     "name": {
       "zh": "黄金鳄鱼头",
       "en": "黄金鳄鱼头"
@@ -922,7 +922,7 @@
   {
     "id": "item_90",
     "category": "2x2",
-    "rarity": "epic",
+    "rarity": "mythic",
     "name": {
       "zh": "已封存音源",
       "en": "已封存音源"
@@ -985,7 +985,7 @@
   {
     "id": "item_96",
     "category": "2x2",
-    "rarity": "epic",
+    "rarity": "mythic",
     "name": {
       "zh": "高能瓦斯罐",
       "en": "高能瓦斯罐"
@@ -1048,7 +1048,7 @@
   {
     "id": "item_102",
     "category": "2x2",
-    "rarity": "epic",
+    "rarity": "mythic",
     "name": {
       "zh": "马上转运",
       "en": "马上转运"
@@ -1111,7 +1111,7 @@
   {
     "id": "item_108",
     "category": "2x2",
-    "rarity": "epic",
+    "rarity": "mythic",
     "name": {
       "zh": "玄武",
       "en": "玄武"
@@ -1174,7 +1174,7 @@
   {
     "id": "item_114",
     "category": "2x2",
-    "rarity": "epic",
+    "rarity": "mythic",
     "name": {
       "zh": "马上起飞",
       "en": "马上起飞"
@@ -1226,7 +1226,7 @@
   {
     "id": "item_119",
     "category": "2x2",
-    "rarity": "epic",
+    "rarity": "mythic",
     "name": {
       "zh": "巨兽机甲模型",
       "en": "巨兽机甲模型"
@@ -1268,7 +1268,7 @@
   {
     "id": "item_123",
     "category": "2x2",
-    "rarity": "epic",
+    "rarity": "mythic",
     "name": {
       "zh": "卫星锅",
       "en": "卫星锅"
@@ -1354,7 +1354,7 @@
   {
     "id": "item_131",
     "category": "2x2",
-    "rarity": "epic",
+    "rarity": "mythic",
     "name": {
       "zh": "红甲修",
       "en": "红甲修"
