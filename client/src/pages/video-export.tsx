@@ -622,7 +622,7 @@ export default function VideoExport() {
     } else {
       video.currentTime = 0;
       scheduledRef.current = new Set();
-      setActiveCards([]); activeCardsRef.current = [];
+      activeCardsRef.current = [];
       setCurrentTime(0);
       video.play().then(() => { setIsPlaying(true); setIsPaused(false); playbackLoop(video, canvas); });
     }
@@ -642,7 +642,7 @@ export default function VideoExport() {
     video.pause(); cancelAnimationFrame(animFrameRef.current);
     stopUiTick();
     setIsPlaying(false); setIsPaused(false);
-    setActiveCards([]); activeCardsRef.current = [];
+    activeCardsRef.current = [];
     scheduledRef.current = new Set();
     video.currentTime = 0; setCurrentTime(0);
     const canvas = canvasRef.current;
@@ -756,7 +756,7 @@ export default function VideoExport() {
     try {
       canvas.width = videoSize.w; canvas.height = videoSize.h;
       scheduledRef.current = new Set();
-      setActiveCards([]); activeCardsRef.current = [];
+      activeCardsRef.current = [];
       chunksRef.current = []; setExportDone(false); setExportUrl(null); setRecordProgress(0);
 
       // Wait for seek to complete before starting playback
