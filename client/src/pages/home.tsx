@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Link } from "wouter";
 import { motion, AnimatePresence, useAnimation } from "framer-motion";
 import { 
@@ -8,6 +8,7 @@ import {
   Trash2, 
   Monitor,
   RefreshCcw,
+  Upload,
   Image as ImageIcon,
   Crosshair,
   Shield,
@@ -473,6 +474,51 @@ export default function Home() {
     setSelectedList(prev => [...prev, newTextItem]);
   };
 
+  const importSessionInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImportSession = useCallback((file: File) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const session = JSON.parse(reader.result as string);
+        if (!Array.isArray(session.events)) throw new Error('invalid');
+        const imported: SelectedItem[] = [];
+        for (const evt of session.events) {
+          if (evt.isText) {
+            imported.push({
+              id: `text_${evt.id}`,
+              uid: Math.random().toString(36).substr(2, 9),
+              category: "text",
+              rarity: evt.textRarity || "mythic",
+              name: { zh: evt.textContent || '', en: evt.textContent || '' },
+              isTextOnly: true,
+              textContent: evt.textContent || '',
+              fixedTime: evt.timestamp != null ? Math.round(evt.timestamp * 1000) : undefined,
+              customScale: evt.customScale,
+              customDuration: evt.customDuration,
+            });
+          } else if (evt.itemId) {
+            const found = allItems.find(i => i.id === evt.itemId);
+            if (found) {
+              imported.push({
+                ...found,
+                uid: Math.random().toString(36).substr(2, 9),
+                fixedTime: evt.timestamp != null ? Math.round(evt.timestamp * 1000) : undefined,
+                customScale: evt.customScale,
+                customDuration: evt.customDuration,
+              });
+            }
+          }
+        }
+        if (imported.length === 0) throw new Error('no items');
+        setSelectedList(imported);
+      } catch {
+        alert(lang === 'zh' ? '无法读取文件，请确认是正确的标记文件。' : 'Could not read file. Please select a valid marks JSON file.');
+      }
+    };
+    reader.readAsText(file);
+  }, [allItems, lang]);
+
   const handlePlay = () => {
     if (selectedList.length === 0 || isPlaying) return;
     
@@ -902,6 +948,25 @@ export default function Home() {
                   >
                     <Plus className="w-4 h-4" />
                   </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => importSessionInputRef.current?.click()}
+                    className="h-7 w-7 text-violet-400 hover:text-violet-300 hover:bg-violet-400/10 rounded-full"
+                    title={lang === 'zh' ? '导入标记文件' : 'Import marks JSON'}
+                  >
+                    <Upload className="w-4 h-4" />
+                  </Button>
+                  <input
+                    ref={importSessionInputRef}
+                    type="file"
+                    accept=".json,application/json"
+                    className="hidden"
+                    onChange={e => {
+                      const file = e.target.files?.[0];
+                      if (file) { handleImportSession(file); e.target.value = ''; }
+                    }}
+                  />
                   {selectedList.length > 0 && (
                     <Button 
                       variant="ghost" 
