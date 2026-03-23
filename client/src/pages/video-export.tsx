@@ -183,6 +183,7 @@ export default function VideoExport() {
 
   // ── DOM refs for live-update during playback/recording (zero React re-renders) ──
   const videoDurationRef = useRef(0);
+  const exportMimeRef = useRef<string>('video/webm');
   const progressFillRef = useRef<HTMLDivElement>(null);
   const progressThumbRef = useRef<HTMLDivElement>(null);
   const timeTextRef = useRef<HTMLSpanElement>(null);
@@ -791,20 +792,33 @@ export default function VideoExport() {
       });
 
       const stream = canvas.captureStream(30);
-      const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
-        ? 'video/webm;codecs=vp9'
-        : MediaRecorder.isTypeSupported('video/webm')
-          ? 'video/webm'
-          : '';
-      if (!mimeType) throw new Error('当前浏览器不支持 WebM 视频录制，请使用 Chrome 或 Edge。');
 
-      const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 8_000_000 });
+      // ── Capture audio from the video element and mix into the recording ──
+      try {
+        const videoStream = (video as any).captureStream?.() ?? (video as any).mozCaptureStream?.();
+        if (videoStream) {
+          videoStream.getAudioTracks().forEach((track: MediaStreamTrack) => stream.addTrack(track));
+        }
+      } catch (e) { /* audio capture unavailable — continue without audio */ }
+
+      // ── Prefer MP4 (H.264 + AAC), fall back to WebM ──
+      const mimeType =
+        MediaRecorder.isTypeSupported('video/mp4;codecs=avc1,mp4a.40.2') ? 'video/mp4;codecs=avc1,mp4a.40.2' :
+        MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' :
+        MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus') ? 'video/webm;codecs=vp9,opus' :
+        MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' :
+        MediaRecorder.isTypeSupported('video/webm') ? 'video/webm' : '';
+      if (!mimeType) throw new Error('当前浏览器不支持视频录制，请使用 Chrome、Edge 或 Safari。');
+      exportMimeRef.current = mimeType;
+
+      const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 12_000_000 });
       mediaRecorderRef.current = recorder;
       recorder.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data); };
       recorder.onstop = () => {
         cancelAnimationFrame(animFrameRef.current);
         if (chunksRef.current.length > 0) {
-          setExportUrl(URL.createObjectURL(new Blob(chunksRef.current, { type: mimeType })));
+          const blobType = exportMimeRef.current || mimeType;
+          setExportUrl(URL.createObjectURL(new Blob(chunksRef.current, { type: blobType })));
           setExportDone(true);
         }
         setIsRecording(false);
@@ -1220,7 +1234,7 @@ export default function VideoExport() {
             ) : (
               <div className="space-y-2">
                 <div className="flex items-center gap-2 text-emerald-400 text-sm font-medium"><CheckCircle2 className="w-4 h-4" />{lang === 'zh' ? '导出完成！' : 'Done!'}</div>
-                <a href={exportUrl!} download={`loot_overlay_${Date.now()}.webm`} className="flex items-center justify-center gap-2 w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-medium text-sm transition-colors">
+                <a href={exportUrl!} download={`loot_overlay_${Date.now()}.${exportMimeRef.current.includes('mp4') ? 'mp4' : 'webm'}`} className="flex items-center justify-center gap-2 w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-medium text-sm transition-colors">
                   <Download className="w-4 h-4" />{lang === 'zh' ? '下载视频' : 'Download'}
                 </a>
                 <button onClick={() => { setExportDone(false); setExportUrl(null); }} className="w-full py-1 text-xs text-slate-500 hover:text-slate-300 transition-colors">{lang === 'zh' ? '重新导出' : 'Re-export'}</button>
