@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { flushSync } from "react-dom";
 import { Link } from "wouter";
-import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft, Upload, Play, Square, Download,
   Trash2, CheckCircle2, Pause, Film, Globe,
@@ -171,7 +171,6 @@ export default function VideoExport() {
   const [markedEvents, setMarkedEvents] = useState<MarkedEvent[]>([]);
   const markedEventsRef = useRef<MarkedEvent[]>([]);
 
-  const [activeCards, setActiveCards] = useState<ActiveCard[]>([]);
   const activeCardsRef = useRef<ActiveCard[]>([]);
   const scheduledRef = useRef<Set<string>>(new Set());
 
@@ -191,8 +190,12 @@ export default function VideoExport() {
   const startUiTick = useCallback(() => {
     stopUiTick();
     uiTickIntervalRef.current = setInterval(() => {
-      if (videoRef.current) setCurrentTime(videoRef.current.currentTime);
-      setRecordProgress(recordProgressRef.current);
+      // flushSync forces a synchronous React commit so concurrent renders
+      // can never interleave with this update → eliminates insertBefore crash
+      flushSync(() => {
+        if (videoRef.current) setCurrentTime(videoRef.current.currentTime);
+        setRecordProgress(recordProgressRef.current);
+      });
     }, 100);
   }, [stopUiTick]);
 
@@ -351,7 +354,6 @@ export default function VideoExport() {
     reader.readAsText(file);
   };
 
-  useEffect(() => { activeCardsRef.current = activeCards; }, [activeCards]);
 
   const formatTime = (secs: number) => {
     const m = Math.floor(secs / 60);
@@ -707,7 +709,6 @@ export default function VideoExport() {
     );
     // CRITICAL: clear all active cards so they don't duplicate when replaying
     activeCardsRef.current = [];
-    setActiveCards([]);
     // Redraw video frame when not playing
     const canvas = canvasRef.current;
     if (canvas) canvas.getContext('2d')!.drawImage(video, 0, 0);
@@ -1066,7 +1067,6 @@ export default function VideoExport() {
                         setMarkedEvents([]);
                         scheduledRef.current = new Set();
                         activeCardsRef.current = [];
-                        setActiveCards([]);
                       }
                     }}
                     className="p-1 text-slate-500 hover:text-red-400 transition-colors"
@@ -1209,24 +1209,16 @@ export default function VideoExport() {
       </div>
 
       {/* ── PER-ITEM CONTEXT MENU ── */}
-      <AnimatePresence>
-        {ctxMenu && (() => {
-          const cEvt = markedEvents.find(e => e.id === ctxMenu.eventId);
-          if (!cEvt) return null;
+      {ctxMenu && markedEvents.find(e => e.id === ctxMenu.eventId) && (() => {
+          const cEvt = markedEvents.find(e => e.id === ctxMenu.eventId)!;
           const isTextEvt = !!cEvt.isText;
-          // Clamp position so menu doesn't go off-screen
           const menuW = 248, menuH = isTextEvt ? 220 : 160;
           const clampedX = Math.min(ctxMenu.x, window.innerWidth - menuW - 8);
           const clampedY = Math.min(ctxMenu.y, window.innerHeight - menuH - 8);
           return (
-            <motion.div
+            <div
               ref={ctxMenuRef}
-              key="ctx-menu"
-              initial={{ opacity: 0, scale: 0.93, y: -4 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: -4 }}
-              transition={{ duration: 0.12 }}
-              className="fixed z-[100] bg-slate-800 border border-slate-600 rounded-xl shadow-2xl p-3 w-[248px]"
+              className="fixed z-[100] bg-slate-800 border border-slate-600 rounded-xl shadow-2xl p-3 w-[248px] animate-in fade-in zoom-in-95 duration-100"
               style={{ left: clampedX, top: clampedY }}
             >
               <div className="text-[11px] font-semibold text-slate-400 mb-2.5 px-0.5 flex items-center justify-between">
@@ -1304,22 +1296,18 @@ export default function VideoExport() {
                   {lang === 'zh' ? '删除' : 'Delete'}
                 </button>
               </div>
-            </motion.div>
+            </div>
           );
         })()}
-      </AnimatePresence>
 
       {/* ── ITEM PICKER DIALOG ── */}
-      <AnimatePresence>
-        {showPicker && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      {showPicker && (
+          <div
             className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-4"
             onClick={() => setShowPicker(false)}
           >
-            <motion.div
-              initial={{ scale: 0.92, opacity: 0, y: 16 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.92, opacity: 0, y: 8 }}
-              transition={{ type: 'spring', stiffness: 320, damping: 28 }}
-              className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden"
+            <div
+              className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150"
               onClick={e => e.stopPropagation()}
             >
               {/* Header */}
@@ -1481,21 +1469,18 @@ export default function VideoExport() {
                   </Button>
                 </div>
               )}
-            </motion.div>
-          </motion.div>
+            </div>
+          </div>
         )}
-      </AnimatePresence>
 
       {/* Add Custom Item Dialog */}
-      <AnimatePresence>
-        {showAddDialog && (
-          <AddItemDialog
-            lang={lang}
-            onAdd={addCustomItem}
-            onClose={() => setShowAddDialog(false)}
-          />
-        )}
-      </AnimatePresence>
+      {showAddDialog && (
+        <AddItemDialog
+          lang={lang}
+          onAdd={addCustomItem}
+          onClose={() => setShowAddDialog(false)}
+        />
+      )}
     </div>
   );
 }
