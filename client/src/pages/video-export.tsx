@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, startTransition } from "react";
 import { Link } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -573,14 +573,13 @@ export default function VideoExport() {
   const playbackLoop = useCallback((video: HTMLVideoElement, canvas: HTMLCanvasElement) => {
     const loop = () => {
       const tMs = video.currentTime * 1000;
-      setCurrentTime(video.currentTime);
+      startTransition(() => { setCurrentTime(video.currentTime); });
       markedEventsRef.current.forEach(evt => {
         if (scheduledRef.current.has(evt.id)) return;
         if (tMs >= evt.timestamp * 1000 - 50) {
           scheduledRef.current.add(evt.id);
           const nc: ActiveCard = { uid: `${evt.id}_p`, event: evt, startTime: evt.timestamp * 1000, duration: cardLifetime[0] };
           activeCardsRef.current = [...activeCardsRef.current, nc];
-          setActiveCards([...activeCardsRef.current]);
         }
       });
       renderFrame(video, canvas, activeCardsRef.current, tMs);
@@ -768,14 +767,16 @@ export default function VideoExport() {
       const loop = () => {
         if (!videoRef.current || !canvasRef.current) { recorder.stop(); return; }
         const tMs = video.currentTime * 1000;
-        setRecordProgress(Math.round((video.currentTime / dur) * 100));
-        setCurrentTime(video.currentTime);
+        startTransition(() => {
+          setRecordProgress(Math.round((video.currentTime / dur) * 100));
+          setCurrentTime(video.currentTime);
+        });
         markedEventsRef.current.forEach(evt => {
           if (scheduledRef.current.has(evt.id)) return;
           if (tMs >= evt.timestamp * 1000 - 50) {
             scheduledRef.current.add(evt.id);
             const nc: ActiveCard = { uid: evt.id, event: evt, startTime: evt.timestamp * 1000, duration: cardLifetime[0] };
-            activeCardsRef.current = [...activeCardsRef.current, nc]; setActiveCards([...activeCardsRef.current]);
+            activeCardsRef.current = [...activeCardsRef.current, nc];
           }
         });
         renderFrame(video, canvas, activeCardsRef.current, tMs);
