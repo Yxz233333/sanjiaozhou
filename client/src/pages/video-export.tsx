@@ -157,6 +157,13 @@ function formatTime(secs: number) {
   return `${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}.${cs.toString().padStart(2,'0')}`;
 }
 
+function createUniqueId(prefix: string) {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return `${prefix}_${crypto.randomUUID()}`;
+  }
+  return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
 export default function VideoExport() {
   const [lang, setLang] = useState<"zh" | "en">("zh");
 
@@ -236,6 +243,13 @@ export default function VideoExport() {
   const [recordProgress, setRecordProgress] = useState(0);
   const [exportDone, setExportDone] = useState(false);
   const [exportUrl, setExportUrl] = useState<string | null>(null);
+  const [isSafeExporting, setIsSafeExporting] = useState(false);
+  const [safeExportProgress, setSafeExportProgress] = useState(0);
+  const [safeExportUrl, setSafeExportUrl] = useState<string | null>(null);
+  const safeRecorderRef = useRef<MediaRecorder | null>(null);
+  const safeChunksRef = useRef<Blob[]>([]);
+  const safeRafRef = useRef<number>(0);
+  const safeVideoRef = useRef<HTMLVideoElement | null>(null);
 
   // Animation params (mirrors home.tsx sliders)
   const [overlayScale, setOverlayScale] = useState([1]);
@@ -328,17 +342,20 @@ export default function VideoExport() {
 
   const restoreSession = (session: SavedSession) => {
     const restored: MarkedEvent[] = [];
+    const usedIds = new Set<string>();
     for (const e of session.events) {
+      const safeId = e.id && !usedIds.has(e.id) ? e.id : createUniqueId(e.isText ? 'text' : 'mark');
+      usedIds.add(safeId);
       const overrides = {
         customScale: e.customScale,
         customDuration: e.customDuration,
         customFontSize: e.customFontSize,
       };
       if (e.isText) {
-        restored.push({ id: e.id, timestamp: e.timestamp, isText: true, textContent: e.textContent, textRarity: e.textRarity, ...overrides });
+        restored.push({ id: safeId, timestamp: e.timestamp, isText: true, textContent: e.textContent, textRarity: e.textRarity, ...overrides });
       } else if (e.itemId) {
         const item = allItems.find(i => i.id === e.itemId);
-        if (item) restored.push({ id: e.id, timestamp: e.timestamp, item, ...overrides });
+        if (item) restored.push({ id: safeId, timestamp: e.timestamp, item, ...overrides });
       }
     }
     setMarkedEvents(restored.sort((a, b) => a.timestamp - b.timestamp));
@@ -691,14 +708,14 @@ export default function VideoExport() {
   }, [isPlaying]);
 
   const handlePickerSelectItem = (item: LibraryItem) => {
-    const evt: MarkedEvent = { id: `mark_${Date.now()}`, timestamp: parseFloat(pickerTimestamp.toFixed(2)), item };
+    const evt: MarkedEvent = { id: createUniqueId('mark'), timestamp: parseFloat(pickerTimestamp.toFixed(2)), item };
     setMarkedEvents(prev => [...prev, evt].sort((a, b) => a.timestamp - b.timestamp));
     setShowPicker(false);
   };
 
   const handlePickerAddText = () => {
     if (!textInput.trim()) return;
-    const evt: MarkedEvent = { id: `text_${Date.now()}`, timestamp: parseFloat(pickerTimestamp.toFixed(2)), isText: true, textContent: textInput.trim(), textRarity };
+    const evt: MarkedEvent = { id: createUniqueId('text'), timestamp: parseFloat(pickerTimestamp.toFixed(2)), isText: true, textContent: textInput.trim(), textRarity };
     setMarkedEvents(prev => [...prev, evt].sort((a, b) => a.timestamp - b.timestamp));
     setShowPicker(false);
   };
@@ -760,15 +777,46 @@ export default function VideoExport() {
   useEffect(() => {
     return () => {
       cancelAnimationFrame(animFrameRef.current);
+      cancelAnimationFrame(safeRafRef.current);
       stopUiTick();
       if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
         try { mediaRecorderRef.current.stop(); } catch {}
       }
+      if (safeRecorderRef.current && safeRecorderRef.current.state !== 'inactive') {
+        try { safeRecorderRef.current.stop(); } catch {}
+      }
+      safeVideoRef.current?.pause();
       try { audioCtxRef.current?.close(); } catch {}
     };
   }, [stopUiTick]);
 
   // ── EXPORT ──
+  const createRecorderWithFallback = (stream: MediaStream) => {
+    const mimeCandidates = [
+      'video/webm;codecs=vp9,opus',
+      'video/webm;codecs=vp8,opus',
+      'video/webm;codecs=vp9',
+      'video/webm;codecs=vp8',
+      'video/webm',
+      'video/mp4;codecs=h264,aac',
+      'video/mp4',
+    ].filter(type => MediaRecorder.isTypeSupported(type));
+
+    for (const type of mimeCandidates) {
+      try {
+        const recorder = new MediaRecorder(stream, {
+          mimeType: type,
+          videoBitsPerSecond: 20_000_000,
+          audioBitsPerSecond: 192_000,
+        });
+        return { recorder, mimeType: type };
+      } catch {
+        // try next
+      }
+    }
+    throw new Error('当前浏览器不支持视频导出，请尝试 Chrome / Edge（或升级浏览器）。');
+  };
+
   const startExport = async () => {
     const video = videoRef.current; const canvas = canvasRef.current; if (!video || !canvas) return;
 
@@ -822,25 +870,14 @@ export default function VideoExport() {
         console.warn('AudioContext audio capture failed:', e);
       }
 
-      // ── WebM VP9: high bitrate ≈ near-lossless quality ──
-      const mimeType =
-        MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus') ? 'video/webm;codecs=vp9,opus' :
-        MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' :
-        MediaRecorder.isTypeSupported('video/webm') ? 'video/webm' : '';
-      if (!mimeType) throw new Error('当前浏览器不支持视频录制，请使用 Chrome 或 Edge。');
-      exportMimeRef.current = mimeType;
-
-      const recorder = new MediaRecorder(stream, {
-        mimeType,
-        videoBitsPerSecond: 50_000_000,   // 50 Mbps ≈ visually lossless for 1080p VP9
-        audioBitsPerSecond: 320_000,
-      });
+      const { recorder, mimeType: selectedMime } = createRecorderWithFallback(stream);
+      exportMimeRef.current = selectedMime;
       mediaRecorderRef.current = recorder;
       recorder.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data); };
       recorder.onstop = () => {
         cancelAnimationFrame(animFrameRef.current);
         if (chunksRef.current.length > 0) {
-          const blobType = exportMimeRef.current || mimeType;
+          const blobType = exportMimeRef.current || selectedMime;
           setExportUrl(URL.createObjectURL(new Blob(chunksRef.current, { type: blobType })));
           setExportDone(true);
         }
@@ -879,6 +916,87 @@ export default function VideoExport() {
       setIsRecording(false);
       const msg = err instanceof Error ? err.message : String(err);
       alert(`导出失败：${msg}`);
+    }
+  };
+
+  const stopSafeExport = () => {
+    if (safeRafRef.current) cancelAnimationFrame(safeRafRef.current);
+    if (safeVideoRef.current) safeVideoRef.current.pause();
+    if (safeRecorderRef.current && safeRecorderRef.current.state !== 'inactive') {
+      try { safeRecorderRef.current.stop(); } catch {}
+    }
+    setIsSafeExporting(false);
+  };
+
+  const startSafeExport = async () => {
+    if (!videoUrl || markedEvents.length === 0 || isSafeExporting) return;
+    setSafeExportProgress(0);
+    setSafeExportUrl(null);
+    setIsSafeExporting(true);
+
+    try {
+      const tempVideo = document.createElement('video');
+      tempVideo.src = videoUrl;
+      tempVideo.preload = 'auto';
+      tempVideo.muted = true;
+      tempVideo.playsInline = true;
+      safeVideoRef.current = tempVideo;
+      await new Promise<void>((resolve, reject) => {
+        tempVideo.onloadedmetadata = () => resolve();
+        tempVideo.onerror = () => reject(new Error('视频读取失败'));
+      });
+
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = tempVideo.videoWidth || videoSize.w;
+      tempCanvas.height = tempVideo.videoHeight || videoSize.h;
+      const stream = tempCanvas.captureStream(30);
+      const { recorder, mimeType } = createRecorderWithFallback(stream);
+      safeRecorderRef.current = recorder;
+      safeChunksRef.current = [];
+
+      recorder.ondataavailable = e => { if (e.data.size > 0) safeChunksRef.current.push(e.data); };
+      recorder.onstop = () => {
+        setIsSafeExporting(false);
+        if (safeChunksRef.current.length > 0) {
+          const url = URL.createObjectURL(new Blob(safeChunksRef.current, { type: mimeType }));
+          setSafeExportUrl(url);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `loot_overlay_safe_${Date.now()}.${mimeType.includes('mp4') ? 'mp4' : 'webm'}`;
+          a.click();
+        }
+      };
+      recorder.start(100);
+
+      const ctx = tempCanvas.getContext('2d')!;
+      const dur = tempVideo.duration || 1;
+      const frame = () => {
+        if (!safeVideoRef.current || !safeRecorderRef.current || safeRecorderRef.current.state === 'inactive') return;
+        const tMs = tempVideo.currentTime * 1000;
+        const cards: ActiveCard[] = markedEventsRef.current
+          .filter(evt => tMs >= evt.timestamp * 1000 && tMs < evt.timestamp * 1000 + (evt.customDuration !== undefined ? evt.customDuration * 1000 : cardLifetime[0]))
+          .map(evt => ({ uid: evt.id, event: evt, startTime: evt.timestamp * 1000, duration: evt.customDuration !== undefined ? evt.customDuration * 1000 : cardLifetime[0] }));
+
+        ctx.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
+        ctx.drawImage(tempVideo, 0, 0, tempCanvas.width, tempCanvas.height);
+        cards.slice(-maxStackItems[0]).forEach((card, idx) => {
+          const p = Math.min(1, (tMs - card.startTime) / card.duration);
+          drawCard(ctx, card.event, idx, p, overlayScale[0], tempCanvas.width);
+        });
+
+        setSafeExportProgress(Math.round((tempVideo.currentTime / dur) * 100));
+        if (!tempVideo.ended && !tempVideo.paused) {
+          safeRafRef.current = requestAnimationFrame(frame);
+        } else if (safeRecorderRef.current.state !== 'inactive') {
+          safeRecorderRef.current.stop();
+        }
+      };
+
+      await tempVideo.play();
+      safeRafRef.current = requestAnimationFrame(frame);
+    } catch (err) {
+      setIsSafeExporting(false);
+      alert(`新导出失败：${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
@@ -1247,19 +1365,36 @@ export default function VideoExport() {
               ))}
             </div>
             {!exportDone ? (
-              <Button
-                className={cn("w-full text-white font-bold", isRecording ? "bg-red-600 hover:bg-red-500" : "bg-violet-600 hover:bg-violet-500")}
-                onClick={isRecording ? stopExport : startExport}
-                disabled={markedEvents.length === 0 || (isPlaying && !isRecording)}
-              >
-                {isRecording ? <><Square className="w-4 h-4 mr-2" /><span ref={exportBtnPctRef}>{lang === 'zh' ? '停止 0%' : 'Stop 0%'}</span></> : <><Film className="w-4 h-4 mr-2" />{lang === 'zh' ? '合成并导出' : 'Render & Export'}</>}
-              </Button>
+              <div className="space-y-2">
+                <Button
+                  className={cn("w-full text-white font-bold", isRecording ? "bg-red-600 hover:bg-red-500" : "bg-violet-600 hover:bg-violet-500")}
+                  onClick={isRecording ? stopExport : startExport}
+                  disabled={markedEvents.length === 0 || (isPlaying && !isRecording)}
+                >
+                  {isRecording ? <><Square className="w-4 h-4 mr-2" /><span ref={exportBtnPctRef}>{lang === 'zh' ? '停止 0%' : 'Stop 0%'}</span></> : <><Film className="w-4 h-4 mr-2" />{lang === 'zh' ? '合成并导出（原）' : 'Render & Export (Legacy)'}</>}
+                </Button>
+                <Button
+                  variant="outline"
+                  className="w-full border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/10 font-bold"
+                  onClick={isSafeExporting ? stopSafeExport : startSafeExport}
+                  disabled={markedEvents.length === 0 || isRecording}
+                >
+                  {isSafeExporting
+                    ? <><Square className="w-4 h-4 mr-2" />{lang === 'zh' ? `停止新导出 ${safeExportProgress}%` : `Stop Safe Export ${safeExportProgress}%`}</>
+                    : <><Film className="w-4 h-4 mr-2" />{lang === 'zh' ? '新导出按钮（更稳定）' : 'Safe Export (Stable)'}</>}
+                </Button>
+              </div>
             ) : (
               <div className="space-y-2">
                 <div className="flex items-center gap-2 text-emerald-400 text-sm font-medium"><CheckCircle2 className="w-4 h-4" />{lang === 'zh' ? '导出完成！' : 'Done!'}</div>
                 <a href={exportUrl!} download={`loot_overlay_${Date.now()}.${exportMimeRef.current.includes('mp4') ? 'mp4' : 'webm'}`} className="flex items-center justify-center gap-2 w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-medium text-sm transition-colors">
                   <Download className="w-4 h-4" />{lang === 'zh' ? '下载视频' : 'Download'}
                 </a>
+                {safeExportUrl && (
+                  <a href={safeExportUrl} download className="flex items-center justify-center gap-2 w-full py-2 bg-emerald-700/70 hover:bg-emerald-600 text-white rounded-lg font-medium text-sm transition-colors">
+                    <Download className="w-4 h-4" />{lang === 'zh' ? '下载新导出视频' : 'Download Safe Export'}
+                  </a>
+                )}
                 <button onClick={() => { setExportDone(false); setExportUrl(null); }} className="w-full py-1 text-xs text-slate-500 hover:text-slate-300 transition-colors">{lang === 'zh' ? '重新导出' : 'Re-export'}</button>
               </div>
             )}
